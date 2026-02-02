@@ -1,13 +1,105 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ainote</title>
-  </head>
-  <body>
+    <title>ScholarAI Notebook</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              paper: '#fdfbf7', // Warm off-white
+              'paper-line': '#e2e8f0', // Light blue/gray for lines
+              'paper-margin': '#fca5a5', // Red margin line
+              ink: '#334155', // Soft black for text
+              desk: '#f5f5f4', // Warm stone background
+              wood: '#e7e5e4',
+              highlight: '#fef3c7', // Sticky note yellow
+            },
+            fontFamily: {
+              sans: ['Nunito', 'sans-serif'],
+              hand: ['Patrick Hand', 'cursive'],
+            },
+            boxShadow: {
+              'notebook': '2px 4px 12px -2px rgba(0, 0, 0, 0.1)',
+              'floating': '0 8px 30px rgba(0,0,0,0.08)',
+            }
+          }
+        }
+      }
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700&family=Patrick+Hand&display=swap" rel="stylesheet">
+    <style>
+      body { font-family: 'Nunito', sans-serif; background-color: #f5f5f4; }
+      
+      /* Lined Paper Pattern */
+      .lined-paper {
+        background-color: #fdfbf7;
+        background-image: linear-gradient(#e2e8f0 1px, transparent 1px);
+        background-size: 100% 2rem;
+        position: relative;
+        line-height: 2rem;
+      }
+      
+      /* Red Margin Line */
+      .lined-paper::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: 3rem;
+        border-left: 2px solid #fca5a5;
+        opacity: 0.6;
+        pointer-events: none;
+      }
+
+      /* Grid Paper Pattern (for Math/Science) */
+      .grid-paper {
+        background-color: #fdfbf7;
+        background-image: linear-gradient(#e2e8f0 1px, transparent 1px), linear-gradient(90deg, #e2e8f0 1px, transparent 1px);
+        background-size: 20px 20px;
+      }
+
+      /* Sticky Note Effect */
+      .sticky-note {
+        background-color: #fef08a;
+        box-shadow: 2px 4px 6px rgba(0,0,0,0.1);
+        transform: rotate(-1deg);
+        font-family: 'Patrick Hand', cursive;
+      }
+
+      /* Scrollbar */
+      ::-webkit-scrollbar { width: 8px; }
+      ::-webkit-scrollbar-track { background: transparent; }
+      ::-webkit-scrollbar-thumb { background: #d6d3d1; border-radius: 4px; }
+      ::-webkit-scrollbar-thumb:hover { background: #a8a29e; }
+      
+      /* Animations */
+      @keyframes slideUp {
+        from { transform: translateY(20px); opacity: 0; }
+        to { transform: translateY(0); opacity: 1; }
+      }
+      .animate-slide-up { animation: slideUp 0.4s ease-out forwards; }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react/": "https://esm.sh/react@^19.2.4/",
+    "react": "https://esm.sh/react@^19.2.4",
+    "@google/genai": "https://esm.sh/@google/genai@^1.39.0",
+    "lucide-react": "https://esm.sh/lucide-react@^0.563.0",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
+    "pdf-lib": "https://esm.sh/pdf-lib@^1.17.1",
+    "jspdf": "https://esm.sh/jspdf@^2.5.1"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+  <body class="bg-stone-100 text-stone-800 h-screen overflow-hidden">
     <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
+  <script type="module" src="/index.tsx"></script>
+</body>
 </html>

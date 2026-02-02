@@ -1,0 +1,7 @@
+{
+  "name": "ScholarAI Notebook",
+  "description": "An intelligent student notebook that records, transcribes, and organizes lectures into virtual registers using Gemini AI.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
