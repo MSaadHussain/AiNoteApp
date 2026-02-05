@@ -5,8 +5,10 @@ import AudioRecorder from './components/AudioRecorder';
 import NoteView from './components/NoteView';
 import StudyMode from './components/StudyMode';
 import Notepad from './components/Notepad';
-import { Note, SubjectRegister, AppView } from './types';
+import PdfReader from './components/PdfReader';
+import { Note, SubjectRegister, AppView, Reminder } from './types';
 import { performSemanticSearch } from './services/geminiService';
+import { Menu, Bell, Backpack } from 'lucide-react';
 
 // Pastel colors for Notebook covers
 const COLORS = [
@@ -23,6 +25,7 @@ const App: React.FC = () => {
   const [notes, setNotes] = useState<Note[]>([]);
   const [registers, setRegisters] = useState<SubjectRegister[]>([]);
   const [customRegisterNames, setCustomRegisterNames] = useState<string[]>([]);
+  const [reminders, setReminders] = useState<Reminder[]>([]);
   
   const [activeSubject, setActiveSubject] = useState<string | null>(null);
   const [selectedNote, setSelectedNote] = useState<Note | null>(null);
@@ -35,9 +38,14 @@ const App: React.FC = () => {
   const [notepadInitialNote, setNotepadInitialNote] = useState<Note | null>(null);
   const [notepadSubject, setNotepadSubject] = useState<string | undefined>(undefined);
 
+  // Mobile State
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [mobileRemindersOpen, setMobileRemindersOpen] = useState(false);
+
   useEffect(() => {
     const savedNotes = localStorage.getItem('scholarai_notes');
     const savedRegisters = localStorage.getItem('scholarai_custom_registers');
+    const savedReminders = localStorage.getItem('scholarai_reminders');
     
     if (savedRegisters) {
         setCustomRegisterNames(JSON.parse(savedRegisters));
@@ -46,6 +54,10 @@ const App: React.FC = () => {
     if (savedNotes) {
       const parsedNotes = JSON.parse(savedNotes);
       setNotes(parsedNotes);
+    }
+
+    if (savedReminders) {
+        setReminders(JSON.parse(savedReminders));
     }
   }, []);
 
@@ -56,6 +68,10 @@ const App: React.FC = () => {
   useEffect(() => {
     localStorage.setItem('scholarai_custom_registers', JSON.stringify(customRegisterNames));
   }, [customRegisterNames]);
+
+  useEffect(() => {
+    localStorage.setItem('scholarai_reminders', JSON.stringify(reminders));
+  }, [reminders]);
 
   useEffect(() => {
       const subjectsFromNotes = new Set(notes.map(n => n.subject));
@@ -71,28 +87,32 @@ const App: React.FC = () => {
 
   const handleNoteCreated = (newNotes: Note | Note[]) => {
     const notesToAdd = Array.isArray(newNotes) ? newNotes : [newNotes];
-    
-    // Add new notes to the top of the list
     setNotes(prev => [...notesToAdd, ...prev]);
 
     if (notesToAdd.length > 1) {
-        // If multiple notes were created (e.g. PDF split), go to dashboard to see them all
         if (notesToAdd[0].subject) {
             setActiveSubject(notesToAdd[0].subject);
         }
         setView(AppView.DASHBOARD);
     } else {
-        // If single note, open it immediately
-        setSelectedNote(notesToAdd[0]);
-        setView(AppView.NOTE_VIEW);
+        const note = notesToAdd[0];
+        if (note.type === 'pdf') {
+            setSelectedNote(note);
+            setView(AppView.PDF_VIEW);
+        } else {
+            setSelectedNote(note);
+            setView(AppView.NOTE_VIEW);
+        }
     }
   };
 
   const handleViewChange = (newView: AppView) => {
     setView(newView);
-    if (newView !== AppView.NOTE_VIEW && newView !== AppView.NOTEPAD) {
+    if (newView !== AppView.NOTE_VIEW && newView !== AppView.NOTEPAD && newView !== AppView.PDF_VIEW) {
       setSelectedNote(null);
     }
+    // Close mobile menu on view change
+    setMobileMenuOpen(false);
   };
 
   const handleSubjectSelect = (subject: string) => {
@@ -105,6 +125,7 @@ const App: React.FC = () => {
         setSearchQuery(''); 
         setAiFilteredIds(null);
     }
+    setMobileMenuOpen(false);
   };
 
   const handleCreateRegister = (name: string) => {
@@ -117,14 +138,12 @@ const App: React.FC = () => {
       setNotepadSubject(subject || activeSubject || undefined);
       setNotepadInitialNote(null);
       setView(AppView.NOTEPAD);
+      setMobileMenuOpen(false);
   };
 
   const handleSearchChange = (query: string) => {
       setSearchQuery(query);
-      
-      // When user types, revert to local filtering immediately to avoid stale AI results
       setAiFilteredIds(null);
-
       if(query) {
           setView(AppView.DASHBOARD);
           setActiveSubject(null); 
@@ -133,13 +152,12 @@ const App: React.FC = () => {
 
   const handleSmartSearch = async () => {
       if (!searchQuery.trim()) return;
-
       setIsAiSearching(true);
-      setAiFilteredIds(null); // Clear previous
-      setView(AppView.DASHBOARD); // Ensure we are on dashboard to see results
+      setAiFilteredIds(null);
+      setView(AppView.DASHBOARD);
       setActiveSubject(null);
+      setMobileMenuOpen(false);
 
-      // Prepare minimized metadata for the AI to analyze (avoid hitting token limits with full content)
       const metadata = notes.map(n => ({
           id: n.id,
           title: n.title,
@@ -158,6 +176,8 @@ const App: React.FC = () => {
           setNotepadInitialNote(note);
           setNotepadSubject(note.subject);
           setView(AppView.NOTEPAD);
+      } else if (note.type === 'pdf') {
+          setView(AppView.PDF_VIEW);
       } else {
           setView(AppView.NOTE_VIEW);
       }
@@ -176,15 +196,57 @@ const App: React.FC = () => {
       setView(AppView.DASHBOARD);
   };
 
+  // Reminder Handlers
+  const handleAddReminder = (reminder: Reminder) => {
+      setReminders(prev => [...prev, reminder]);
+  };
+
+  const handleToggleReminder = (id: string) => {
+      setReminders(prev => prev.map(r => r.id === id ? { ...r, completed: !r.completed } : r));
+  };
+
+  const handleDeleteReminder = (id: string) => {
+      setReminders(prev => prev.filter(r => r.id !== id));
+  };
+
+  const handleReminderClick = (reminder: Reminder) => {
+      setMobileRemindersOpen(false); // Close panel on mobile if open
+      if (reminder.type === 'subject' && reminder.targetId) {
+          handleSubjectSelect(reminder.targetId);
+      } else if (reminder.type === 'note' && reminder.targetId) {
+          const note = notes.find(n => n.id === reminder.targetId);
+          if (note) {
+              handleOpenNote(note);
+          } else {
+              setView(AppView.DASHBOARD);
+          }
+      } else {
+          setView(AppView.DASHBOARD);
+      }
+  };
+
+  const handleCreateNoteFromText = (text: string, subject: string) => {
+      const newNote: Note = {
+          id: crypto.randomUUID(),
+          title: "Excerpt from PDF",
+          subject: subject,
+          date: new Date().toLocaleDateString(),
+          type: 'text',
+          rawContent: text,
+          summary: text.substring(0, 100) + "...",
+          sections: [],
+          tags: ['excerpt']
+      };
+      setNotepadInitialNote(newNote);
+      setNotepadSubject(subject);
+      setView(AppView.NOTEPAD);
+  };
+
   const getDisplayNotes = () => {
       let filtered = notes;
-
-      // Priority 1: AI Search Results
       if (aiFilteredIds !== null) {
           return filtered.filter(n => aiFilteredIds.includes(n.id));
       }
-
-      // Priority 2: Standard Text Filter
       if (searchQuery) {
           const lowerQ = searchQuery.toLowerCase();
           filtered = filtered.filter(n => 
@@ -194,17 +256,37 @@ const App: React.FC = () => {
             n.tags.some(t => t.toLowerCase().includes(lowerQ))
           );
       } else if (activeSubject) {
-          // Priority 3: Subject Filter
           filtered = filtered.filter(n => n.subject === activeSubject);
       }
-
       return filtered;
   };
 
   const displayNotes = getDisplayNotes();
 
   return (
-    <div className="flex h-screen bg-stone-100 font-sans text-ink">
+    <div className="flex flex-col md:flex-row h-screen bg-stone-100 font-sans text-ink overflow-hidden">
+      
+      {/* Mobile Header */}
+      <div className="md:hidden h-16 bg-white border-b border-stone-200 flex items-center justify-between px-4 z-40 flex-shrink-0">
+          <button onClick={() => setMobileMenuOpen(true)} className="p-2 text-stone-600">
+              <Menu className="w-6 h-6" />
+          </button>
+          
+          <div className="flex items-center gap-2">
+            <div className="bg-orange-100 p-1.5 rounded-lg border border-orange-200">
+              <Backpack className="text-orange-600 w-4 h-4" />
+            </div>
+            <h1 className="font-hand font-bold text-xl text-stone-800">ScholarAI</h1>
+          </div>
+
+          <button onClick={() => setMobileRemindersOpen(true)} className="p-2 text-stone-600 relative">
+              <Bell className="w-6 h-6" />
+              {reminders.filter(r => !r.completed).length > 0 && (
+                  <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border border-white"></span>
+              )}
+          </button>
+      </div>
+
       <Sidebar 
         registers={registers} 
         currentView={view} 
@@ -216,18 +298,29 @@ const App: React.FC = () => {
         isSearching={isAiSearching}
         searchQuery={searchQuery}
         onCreateRegister={handleCreateRegister}
+        isMobileOpen={mobileMenuOpen}
+        onMobileClose={() => setMobileMenuOpen(false)}
       />
       
       {/* Main "Desk" Area */}
-      <main className="flex-1 overflow-hidden relative p-4 md:p-6 shadow-inner bg-stone-100">
-        <div className="h-full rounded-3xl bg-desk border border-stone-200/50 shadow-sm overflow-hidden relative">
+      <main className="flex-1 overflow-hidden relative p-0 md:p-6 shadow-inner bg-stone-100">
+        <div className="h-full md:rounded-3xl bg-desk border-t md:border border-stone-200/50 shadow-sm overflow-hidden relative">
             {view === AppView.DASHBOARD && (
             <Dashboard 
                 notes={displayNotes} 
                 onOpenNote={handleOpenNote}
                 onNewNote={() => setView(AppView.RECORDER)}
+                onNewNoteInRegister={handleOpenNotepad}
+                onNoteCreated={handleNoteCreated}
                 registers={registers}
                 activeSubject={activeSubject}
+                reminders={reminders}
+                onAddReminder={handleAddReminder}
+                onToggleReminder={handleToggleReminder}
+                onDeleteReminder={handleDeleteReminder}
+                onReminderClick={handleReminderClick}
+                showMobileReminders={mobileRemindersOpen}
+                onCloseMobileReminders={() => setMobileRemindersOpen(false)}
             />
             )}
 
@@ -254,6 +347,15 @@ const App: React.FC = () => {
                 note={selectedNote} 
                 onClose={() => setView(AppView.DASHBOARD)}
             />
+            )}
+
+            {view === AppView.PDF_VIEW && selectedNote && (
+                <PdfReader 
+                    note={selectedNote}
+                    onClose={() => setView(AppView.DASHBOARD)}
+                    onAddReminder={handleAddReminder}
+                    onCreateNoteFromText={handleCreateNoteFromText}
+                />
             )}
 
             {view === AppView.STUDY_MODE && (

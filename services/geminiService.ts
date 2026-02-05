@@ -17,7 +17,6 @@ const blobToBase64 = (blob: Blob): Promise<string> => {
 };
 
 // Initialize GenAI
-// Note: In a real app, ensure API key is secure.
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
 
 /**
@@ -30,7 +29,6 @@ export const splitPdf = async (pdfBlob: Blob, pagesPerChunk: number = 5): Promis
     const totalPages = pdfDoc.getPageCount();
     const chunks: Blob[] = [];
 
-    // If less than or equal to limit, return original (as array)
     if (totalPages <= pagesPerChunk) {
       return [pdfBlob];
     }
@@ -38,22 +36,17 @@ export const splitPdf = async (pdfBlob: Blob, pagesPerChunk: number = 5): Promis
     for (let i = 0; i < totalPages; i += pagesPerChunk) {
       const newPdf = await PDFDocument.create();
       const pageIndices = [];
-      
-      // Calculate indices for this chunk
       for (let j = 0; j < pagesPerChunk && (i + j) < totalPages; j++) {
         pageIndices.push(i + j);
       }
-      
       const copiedPages = await newPdf.copyPages(pdfDoc, pageIndices);
       copiedPages.forEach((page) => newPdf.addPage(page));
-      
       const pdfBytes = await newPdf.save();
       chunks.push(new Blob([pdfBytes], { type: 'application/pdf' }));
     }
     return chunks;
   } catch (error) {
     console.error("Error splitting PDF:", error);
-    // Fallback: return original if splitting fails
     return [pdfBlob];
   }
 };
@@ -64,24 +57,15 @@ export const splitPdf = async (pdfBlob: Blob, pagesPerChunk: number = 5): Promis
 export const transcribeAudio = async (audioBlob: Blob, mimeType: string = 'audio/wav'): Promise<string> => {
   try {
     const base64Audio = await blobToBase64(audioBlob);
-
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: {
         parts: [
-          {
-            inlineData: {
-              mimeType: mimeType,
-              data: base64Audio,
-            },
-          },
-          {
-            text: "Transcribe this lecture audio accurately. Capture the main speaker's words verbatim where possible, but remove excessive filler words like 'um' or 'ah'. return ONLY the transcript text.",
-          },
+          { inlineData: { mimeType: mimeType, data: base64Audio } },
+          { text: "Transcribe this lecture audio accurately. Capture the main speaker's words verbatim where possible, but remove excessive filler words like 'um' or 'ah'. return ONLY the transcript text." },
         ],
       },
     });
-
     return response.text || "Transcription failed.";
   } catch (error) {
     console.error("Transcription error:", error);
@@ -90,35 +74,77 @@ export const transcribeAudio = async (audioBlob: Blob, mimeType: string = 'audio
 };
 
 /**
- * Process uploaded PDF to extract structured notes
+ * Convert Image to Note (OCR + Structure)
+ */
+export const convertImageToNote = async (imageBlob: Blob): Promise<{
+    title: string;
+    content: string;
+    summary: string;
+    tags: string[];
+}> => {
+    try {
+        const base64Image = await blobToBase64(imageBlob);
+        const mimeType = imageBlob.type; // e.g., image/jpeg
+
+        const response = await ai.models.generateContent({
+            model: 'gemini-3-flash-preview',
+            contents: {
+                parts: [
+                    { inlineData: { mimeType, data: base64Image } },
+                    { text: `Analyze this image (notes/whiteboard/document). 
+                    1. Transcribe all visible text accurately.
+                    2. Create a relevant Title.
+                    3. Write a short Summary.
+                    4. Extract 3-5 tags.` }
+                ]
+            },
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                        title: { type: Type.STRING },
+                        content: { type: Type.STRING, description: "The full transcribed text from the image" },
+                        summary: { type: Type.STRING },
+                        tags: { type: Type.ARRAY, items: { type: Type.STRING } }
+                    }
+                }
+            }
+        });
+        
+        const jsonText = response.text;
+        if (!jsonText) throw new Error("Failed to process image");
+        return JSON.parse(jsonText);
+    } catch (error) {
+        console.error("Image processing error:", error);
+        throw error;
+    }
+};
+
+/**
+ * Process uploaded PDF to extract structured notes AND raw text
  */
 export const processPdf = async (pdfBlob: Blob): Promise<{
   title: string;
   summary: string;
   sections: NoteSection[];
   tags: string[];
+  rawText: string;
 }> => {
   try {
     const base64Pdf = await blobToBase64(pdfBlob);
 
-    // Gemini 2.5 Flash handles PDFs well
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: {
         parts: [
-          {
-            inlineData: {
-              mimeType: 'application/pdf',
-              data: base64Pdf,
-            },
-          },
-          {
-            text: `Analyze this PDF document. 
+          { inlineData: { mimeType: 'application/pdf', data: base64Pdf } },
+          { text: `Analyze this PDF document. 
             1. Create a concise Title.
             2. Write a short 3-sentence Summary.
-            3. Break the content into logical sections. For each section, determine its type (definition, example, theory, formula).
-            4. Extract 3-5 keywords as tags.`,
-          },
+            3. Break the content into logical sections.
+            4. Extract 3-5 keywords as tags.
+            5. Extract the FULL raw text content of the document for reading.` },
         ],
       },
       config: {
@@ -129,6 +155,7 @@ export const processPdf = async (pdfBlob: Blob): Promise<{
             title: { type: Type.STRING },
             summary: { type: Type.STRING },
             tags: { type: Type.ARRAY, items: { type: Type.STRING } },
+            rawText: { type: Type.STRING, description: "The full text content of the pdf" },
             sections: {
               type: Type.ARRAY,
               items: {
@@ -165,15 +192,15 @@ export const organizeNote = async (transcript: string): Promise<{
   tags: string[];
 }> => {
   const response = await ai.models.generateContent({
-    model: 'gemini-3-pro-preview', // Using Pro for better structuring logic
+    model: 'gemini-3-pro-preview',
     contents: `Analyze the following lecture transcript. 
-    1. Identify the academic Subject (e.g., Physics, History, CS).
+    1. Identify the academic Subject.
     2. Create a concise Title.
     3. Write a short 3-sentence Summary.
-    4. Break the content into logical sections. For each section, determine its type (definition, example, theory, formula).
+    4. Break the content into logical sections.
     5. Extract 3-5 keywords as tags.
     
-    Transcript: ${transcript.substring(0, 20000)}`, // Limit context if very long
+    Transcript: ${transcript.substring(0, 20000)}`,
     config: {
       responseMimeType: "application/json",
       responseSchema: {
@@ -204,42 +231,23 @@ export const organizeNote = async (transcript: string): Promise<{
   return JSON.parse(jsonText);
 };
 
-/**
- * Solves a specific question or explains a concept using the Thinking Model
- */
 export const solveWithThinking = async (context: string, question: string): Promise<string> => {
   const response = await ai.models.generateContent({
     model: 'gemini-3-pro-preview',
-    contents: `Context from lecture notes: "${context}"\n\nStudent Question: "${question}"\n\nProvide a clear, step-by-step explanation or solution suitable for a student.`,
-    config: {
-      thinkingConfig: {
-        thinkingBudget: 32768, // Max budget for deep reasoning
-      },
-    },
+    contents: `Context from document: "${context}"\n\nStudent Question: "${question}"\n\nProvide a clear, step-by-step explanation or solution.`,
+    config: { thinkingConfig: { thinkingBudget: 32768 } },
   });
-
   return response.text || "Could not generate a solution.";
 };
 
-/**
- * Quick AI Answer for Notepad
- */
 export const getQuickAnswer = async (context: string, question: string): Promise<string> => {
   const response = await ai.models.generateContent({
     model: 'gemini-3-flash-preview',
-    contents: `You are a helpful study assistant. The user is writing notes. 
-    Context of notes so far: "${context.substring(Math.max(0, context.length - 1000))}"
-    
-    User asked: "${question}"
-    
-    Provide a concise, direct answer (1-2 sentences) to complete their thought or answer the question. Do not start with "Here is the answer". Just give the answer.`,
+    contents: `You are a helpful study assistant. Context: "${context.substring(Math.max(0, context.length - 2000))}" User asked: "${question}". Provide a concise, direct answer (1-2 sentences).`,
   });
   return response.text || "";
 };
 
-/**
- * Generates flashcards from note content
- */
 export const generateFlashcards = async (noteContent: string): Promise<Flashcard[]> => {
   const response = await ai.models.generateContent({
     model: 'gemini-3-flash-preview',
@@ -259,26 +267,16 @@ export const generateFlashcards = async (noteContent: string): Promise<Flashcard
       }
     }
   });
-  
   const text = response.text;
   if(!text) return [];
   const cards = JSON.parse(text);
-  // Add unique IDs if AI didn't generate good ones
   return cards.map((c: any, i: number) => ({ ...c, id: c.id || `card-${Date.now()}-${i}` }));
 };
 
-/**
- * Generates a Quiz from note content
- */
 export const generateQuiz = async (noteContent: string): Promise<QuizQuestion[]> => {
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
-      contents: `Create 5 multiple-choice questions (MCQs) to test a student's understanding of these notes. 
-      Provide 4 options for each question. 
-      Indicate the correct answer index (0-3). 
-      Provide a short explanation for the correct answer.
-      
-      Notes: ${noteContent.substring(0, 10000)}`,
+      contents: `Create 5 MCQs. Return JSON. Notes: ${noteContent.substring(0, 10000)}`,
       config: {
         responseMimeType: "application/json",
         responseSchema: {
@@ -296,44 +294,26 @@ export const generateQuiz = async (noteContent: string): Promise<QuizQuestion[]>
         }
       }
     });
-    
     const text = response.text;
     if(!text) return [];
     const questions = JSON.parse(text);
     return questions.map((q: any, i: number) => ({ ...q, id: q.id || `quiz-${Date.now()}-${i}` }));
   };
 
-/**
- * Text-to-Speech using Gemini 2.5 Flash TTS
- */
 export const speakText = async (text: string): Promise<AudioBuffer> => {
   const response = await ai.models.generateContent({
     model: 'gemini-2.5-flash-preview-tts',
     contents: [{ parts: [{ text: text }] }],
     config: {
       responseModalities: [Modality.AUDIO],
-      speechConfig: {
-        voiceConfig: {
-          prebuiltVoiceConfig: { voiceName: 'Puck' }, // 'Puck' is usually a clear voice
-        },
-      },
+      speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Puck' } } },
     },
   });
-
   const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-  
-  if (!base64Audio) {
-    throw new Error("No audio generated");
-  }
-
-  // Decode audio
+  if (!base64Audio) throw new Error("No audio generated");
   const binaryString = atob(base64Audio);
-  const len = binaryString.length;
-  const bytes = new Uint8Array(len);
-  for (let i = 0; i < len; i++) {
-    bytes[i] = binaryString.charCodeAt(i);
-  }
-
+  const bytes = new Uint8Array(binaryString.length);
+  for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
   const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
   return await audioContext.decodeAudioData(bytes.buffer);
 };
@@ -346,44 +326,19 @@ export const playAudioBuffer = (buffer: AudioBuffer) => {
     source.start(0);
 }
 
-/**
- * Performs a semantic search across note metadata using AI.
- * Returns a list of Note IDs that match the query context.
- */
-export const performSemanticSearch = async (
-    query: string, 
-    notesMetadata: { id: string; title: string; summary: string; tags: string[] }[]
-): Promise<string[]> => {
+export const performSemanticSearch = async (query: string, notesMetadata: any[]): Promise<string[]> => {
     if (!query.trim() || notesMetadata.length === 0) return [];
-
     try {
         const response = await ai.models.generateContent({
             model: 'gemini-3-flash-preview',
-            contents: `You are a semantic search engine for a student notebook.
-            
-            User Query: "${query}"
-
-            Below is a list of notes (JSON). Identify the notes that are semantically relevant to the user's query, even if they don't contain exact keywords.
-            For example, if query is "how things move", match notes about "Physics" or "Newton's Laws".
-            
-            Notes Data:
-            ${JSON.stringify(notesMetadata.slice(0, 50))} 
-            
-            Return ONLY a JSON array of strings containing the 'id' of the relevant notes. If none are relevant, return an empty array.`,
+            contents: `User Query: "${query}". Identify relevant note IDs from: ${JSON.stringify(notesMetadata.slice(0, 50))}. Return JSON string array of IDs.`,
             config: {
                 responseMimeType: "application/json",
-                responseSchema: {
-                    type: Type.ARRAY,
-                    items: { type: Type.STRING }
-                }
+                responseSchema: { type: Type.ARRAY, items: { type: Type.STRING } }
             }
         });
-
-        const text = response.text;
-        if (!text) return [];
-        return JSON.parse(text);
+        return JSON.parse(response.text || "[]");
     } catch (error) {
-        console.error("Semantic search failed:", error);
         return [];
     }
 };

@@ -13,7 +13,7 @@ export interface Note {
   date: string;
   type: NoteType;
   originalTranscript?: string; // For audio
-  rawContent?: string; // For text/notepad
+  rawContent?: string; // For text/notepad/pdf-text
   pdfUrl?: string; // For PDF
   summary: string;
   sections: NoteSection[];
@@ -47,10 +47,21 @@ export interface ChatMessage {
   isThinking?: boolean;
 }
 
+export interface Reminder {
+  id: string;
+  text: string;
+  dueDate: string;
+  type: 'general' | 'subject' | 'note';
+  targetId?: string;
+  targetName?: string;
+  completed: boolean;
+}
+
 export enum AppView {
   DASHBOARD = 'DASHBOARD',
   NOTE_VIEW = 'NOTE_VIEW',
   RECORDER = 'RECORDER',
   STUDY_MODE = 'STUDY_MODE',
-  NOTEPAD = 'NOTEPAD', // New view for writing notes
+  NOTEPAD = 'NOTEPAD',
+  PDF_VIEW = 'PDF_VIEW', // New view for PDF interaction
 }
