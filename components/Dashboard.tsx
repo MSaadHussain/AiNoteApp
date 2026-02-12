@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Note, SubjectRegister, Reminder } from '../types';
 import { Clock, Book, ArrowRight, PenTool, Download, FileText, File, Plus, CheckCircle, Trash2, Calendar, Bell, Image, Upload, MoreVertical, X } from 'lucide-react';
 import { exportRegisterAsMarkdown, exportRegisterAsPDF } from '../services/exportService';
-import { convertImageToNote, processPdf } from '../services/geminiService';
 
 interface DashboardProps {
   notes: Note[];
@@ -19,6 +18,8 @@ interface DashboardProps {
   onReminderClick: (reminder: Reminder) => void;
   showMobileReminders: boolean;
   onCloseMobileReminders: () => void;
+  onProcessImage: (blob: Blob, subject?: string) => void;
+  onProcessPdf: (blob: Blob, subject?: string) => void;
 }
 
 interface ContextMenuState {
@@ -44,7 +45,9 @@ const Dashboard: React.FC<DashboardProps> = ({
     onDeleteReminder,
     onReminderClick,
     showMobileReminders,
-    onCloseMobileReminders
+    onCloseMobileReminders,
+    onProcessImage,
+    onProcessPdf
 }) => {
   const [exportMenuOpen, setExportMenuOpen] = useState<string | null>(null);
   
@@ -53,7 +56,6 @@ const Dashboard: React.FC<DashboardProps> = ({
   const dashboardRef = useRef<HTMLDivElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const pdfInputRef = useRef<HTMLInputElement>(null);
-  const [isProcessingUpload, setIsProcessingUpload] = useState(false);
 
   // Reminder Modal State
   const [isReminderModalOpen, setIsReminderModalOpen] = useState(false);
@@ -81,58 +83,15 @@ const Dashboard: React.FC<DashboardProps> = ({
   // --- File Upload Handlers ---
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
       if (e.target.files && e.target.files[0] && contextMenu.targetName) {
-          setIsProcessingUpload(true);
-          try {
-              const file = e.target.files[0];
-              const data = await convertImageToNote(file);
-              const newNote: Note = {
-                  id: crypto.randomUUID(),
-                  title: data.title,
-                  subject: contextMenu.targetName,
-                  date: new Date().toLocaleDateString(),
-                  type: 'text',
-                  rawContent: data.content, // Extracted text
-                  summary: data.summary,
-                  sections: [],
-                  tags: data.tags
-              };
-              onNoteCreated(newNote);
-          } catch (error) {
-              console.error(error);
-              alert("Failed to process image.");
-          } finally {
-              setIsProcessingUpload(false);
-              e.target.value = ''; // Reset
-          }
+          onProcessImage(e.target.files[0], contextMenu.targetName);
+          e.target.value = ''; // Reset input
       }
   };
 
   const handlePdfUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
       if (e.target.files && e.target.files[0] && contextMenu.targetName) {
-          setIsProcessingUpload(true);
-          try {
-              const file = e.target.files[0];
-              const data = await processPdf(file);
-              const newNote: Note = {
-                  id: crypto.randomUUID(),
-                  title: data.title,
-                  subject: contextMenu.targetName,
-                  date: new Date().toLocaleDateString(),
-                  type: 'pdf',
-                  rawContent: data.rawText, // Extracted text for Reader View
-                  pdfUrl: URL.createObjectURL(file), // Store Blob URL for View
-                  summary: data.summary,
-                  sections: data.sections,
-                  tags: data.tags
-              };
-              onNoteCreated(newNote);
-          } catch (error) {
-              console.error(error);
-              alert("Failed to process PDF.");
-          } finally {
-              setIsProcessingUpload(false);
-              e.target.value = '';
-          }
+          onProcessPdf(e.target.files[0], contextMenu.targetName);
+          e.target.value = ''; // Reset input
       }
   };
 
@@ -248,15 +207,6 @@ const Dashboard: React.FC<DashboardProps> = ({
       <input type="file" accept="image/*" ref={imageInputRef} className="hidden" onChange={handleImageUpload} />
       <input type="file" accept="application/pdf" ref={pdfInputRef} className="hidden" onChange={handlePdfUpload} />
       
-      {isProcessingUpload && (
-          <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center backdrop-blur-sm">
-              <div className="bg-white p-6 rounded-2xl flex items-center gap-4 shadow-2xl animate-slide-up">
-                  <div className="w-8 h-8 border-4 border-orange-500 border-t-transparent rounded-full animate-spin"></div>
-                  <span className="font-hand text-xl">Processing your document with AI...</span>
-              </div>
-          </div>
-      )}
-
       <div className="p-6 md:p-8 max-w-6xl mx-auto pr-0 md:pr-80">
         
         {/* Welcome Header */}

@@ -7,8 +7,8 @@ import StudyMode from './components/StudyMode';
 import Notepad from './components/Notepad';
 import PdfReader from './components/PdfReader';
 import { Note, SubjectRegister, AppView, Reminder } from './types';
-import { performSemanticSearch } from './services/geminiService';
-import { Menu, Bell, Backpack } from 'lucide-react';
+import { performSemanticSearch, transcribeAudio, organizeNote, processPdf, splitPdf, convertImageToNote } from './services/geminiService';
+import { Menu, Bell, Backpack, Loader2, CheckCircle, XCircle, ChevronDown, ChevronUp } from 'lucide-react';
 
 // Pastel colors for Notebook covers
 const COLORS = [
@@ -19,6 +19,12 @@ const COLORS = [
   'bg-violet-200 text-violet-800 border-violet-300', 
   'bg-orange-200 text-orange-800 border-orange-300'
 ];
+
+interface BackgroundTask {
+    status: 'processing' | 'organizing' | 'success' | 'error';
+    message: string;
+    details?: string;
+}
 
 const App: React.FC = () => {
   const [view, setView] = useState<AppView>(AppView.DASHBOARD);
@@ -41,6 +47,10 @@ const App: React.FC = () => {
   // Mobile State
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileRemindersOpen, setMobileRemindersOpen] = useState(false);
+
+  // Background Processing State
+  const [bgTask, setBgTask] = useState<BackgroundTask | null>(null);
+  const [isBgTaskExpanded, setIsBgTaskExpanded] = useState(false);
 
   useEffect(() => {
     const savedNotes = localStorage.getItem('scholarai_notes');
@@ -85,25 +95,127 @@ const App: React.FC = () => {
       setRegisters(newRegisters);
   }, [notes, customRegisterNames]);
 
+  // --- Background Processing Handlers ---
+
+  const handleProcessAudio = async (blob: Blob, subject?: string) => {
+      setView(AppView.DASHBOARD); // Go back to desk immediately
+      setBgTask({ status: 'processing', message: 'Transcribing Audio...', details: 'Listening to your recording...' });
+      
+      try {
+          const transcript = await transcribeAudio(blob, blob.type);
+          
+          setBgTask({ status: 'organizing', message: 'Organizing Notes...', details: 'Structuring content with AI...' });
+          const organizedData = await organizeNote(transcript);
+          
+          const finalSubject = (subject || organizedData.subject) || 'General';
+          const newNote: Note = {
+            id: crypto.randomUUID(),
+            title: organizedData.title,
+            subject: finalSubject,
+            date: new Date().toLocaleDateString(),
+            type: 'audio',
+            originalTranscript: transcript,
+            summary: organizedData.summary,
+            sections: organizedData.sections,
+            tags: organizedData.tags,
+            audioUrl: URL.createObjectURL(blob)
+          };
+
+          handleNoteCreated(newNote);
+          setBgTask({ status: 'success', message: 'Audio Note Created!', details: `Saved "${newNote.title}"` });
+          setTimeout(() => setBgTask(null), 4000);
+      } catch (error) {
+          console.error(error);
+          setBgTask({ status: 'error', message: 'Processing Failed', details: 'Could not process audio.' });
+          setTimeout(() => setBgTask(null), 5000);
+      }
+  };
+
+  const handleProcessPdf = async (blob: Blob, subject?: string) => {
+      setView(AppView.DASHBOARD);
+      setBgTask({ status: 'processing', message: 'Analyzing PDF...', details: 'Scanning document pages...' });
+
+      try {
+          // 1. Split PDF
+          const pdfChunks = await splitPdf(blob, 5);
+          const createdNotes: Note[] = [];
+
+          // 2. Process Chunks
+          for (let i = 0; i < pdfChunks.length; i++) {
+             setBgTask({ 
+                 status: 'organizing', 
+                 message: 'Reading PDF...', 
+                 details: `Processing part ${i + 1} of ${pdfChunks.length}...` 
+             });
+
+             const chunk = pdfChunks[i];
+             const pdfData = await processPdf(chunk);
+
+             let noteTitle = pdfData.title;
+             if (pdfChunks.length > 1) {
+                 noteTitle = `${noteTitle} (Part ${i + 1})`;
+             }
+
+             const finalSubject = subject || 'General';
+             
+             const newNote: Note = {
+                id: crypto.randomUUID(),
+                title: noteTitle,
+                subject: finalSubject,
+                date: new Date().toLocaleDateString(),
+                type: 'pdf',
+                rawContent: pdfData.rawText,
+                summary: pdfData.summary,
+                sections: pdfData.sections,
+                tags: pdfData.tags,
+                pdfUrl: URL.createObjectURL(chunk)
+            };
+            createdNotes.push(newNote);
+          }
+          
+          handleNoteCreated(createdNotes.reverse());
+          setBgTask({ status: 'success', message: 'PDF Processed!', details: `Created ${createdNotes.length} notes.` });
+          setTimeout(() => setBgTask(null), 4000);
+
+      } catch (error) {
+          console.error(error);
+          setBgTask({ status: 'error', message: 'Processing Failed', details: 'Could not read PDF.' });
+          setTimeout(() => setBgTask(null), 5000);
+      }
+  };
+
+  const handleProcessImage = async (blob: Blob, subject?: string) => {
+      // Don't change view if already on dashboard, just show indicator
+      setBgTask({ status: 'processing', message: 'Reading Image...', details: 'Extracting text from image...' });
+
+      try {
+          const data = await convertImageToNote(blob);
+          const newNote: Note = {
+              id: crypto.randomUUID(),
+              title: data.title,
+              subject: subject || 'General',
+              date: new Date().toLocaleDateString(),
+              type: 'text',
+              rawContent: data.content,
+              summary: data.summary,
+              sections: [],
+              tags: data.tags
+          };
+          
+          handleNoteCreated(newNote);
+          setBgTask({ status: 'success', message: 'Image Note Created!', details: 'Image converted to text successfully.' });
+          setTimeout(() => setBgTask(null), 4000);
+      } catch (error) {
+          console.error(error);
+          setBgTask({ status: 'error', message: 'Failed', details: 'Could not read image.' });
+          setTimeout(() => setBgTask(null), 5000);
+      }
+  };
+
+
   const handleNoteCreated = (newNotes: Note | Note[]) => {
     const notesToAdd = Array.isArray(newNotes) ? newNotes : [newNotes];
     setNotes(prev => [...notesToAdd, ...prev]);
-
-    if (notesToAdd.length > 1) {
-        if (notesToAdd[0].subject) {
-            setActiveSubject(notesToAdd[0].subject);
-        }
-        setView(AppView.DASHBOARD);
-    } else {
-        const note = notesToAdd[0];
-        if (note.type === 'pdf') {
-            setSelectedNote(note);
-            setView(AppView.PDF_VIEW);
-        } else {
-            setSelectedNote(note);
-            setView(AppView.NOTE_VIEW);
-        }
-    }
   };
 
   const handleViewChange = (newView: AppView) => {
@@ -266,6 +378,61 @@ const App: React.FC = () => {
   return (
     <div className="flex flex-col md:flex-row h-screen bg-stone-100 font-sans text-ink overflow-hidden">
       
+      {/* Persistent Background Task Indicator (Top Right) */}
+      {bgTask && (
+        <div 
+            className={`fixed top-4 right-4 z-[100] transition-all duration-300 ${isBgTaskExpanded ? 'w-80' : 'w-auto'}`}
+        >
+            <div 
+                className="bg-white border border-stone-200 shadow-xl rounded-xl overflow-hidden cursor-pointer hover:shadow-2xl transition-shadow"
+                onClick={() => setIsBgTaskExpanded(!isBgTaskExpanded)}
+            >
+                {/* Collapsed State */}
+                {!isBgTaskExpanded && (
+                    <div className="p-3 flex items-center gap-3 pr-4 animate-fade-in">
+                        {bgTask.status === 'processing' || bgTask.status === 'organizing' ? (
+                            <div className="relative">
+                                <Loader2 className="w-5 h-5 text-orange-500 animate-spin" />
+                            </div>
+                        ) : bgTask.status === 'success' ? (
+                            <CheckCircle className="w-5 h-5 text-green-500" />
+                        ) : (
+                            <XCircle className="w-5 h-5 text-red-500" />
+                        )}
+                        <span className="font-bold text-sm text-stone-700 whitespace-nowrap">
+                            {bgTask.message}
+                        </span>
+                    </div>
+                )}
+
+                {/* Expanded State */}
+                {isBgTaskExpanded && (
+                    <div className="p-4 bg-white animate-fade-in">
+                        <div className="flex justify-between items-start mb-2">
+                             <div className="flex items-center gap-2">
+                                {bgTask.status === 'processing' || bgTask.status === 'organizing' ? (
+                                    <Loader2 className="w-4 h-4 text-orange-500 animate-spin" />
+                                ) : <CheckCircle className="w-4 h-4 text-green-500" />}
+                                <h4 className="font-bold text-stone-800 text-sm">{bgTask.message}</h4>
+                             </div>
+                             <button className="text-stone-400 hover:text-stone-600">
+                                 <ChevronUp className="w-4 h-4" />
+                             </button>
+                        </div>
+                        <p className="text-xs text-stone-500 leading-relaxed">
+                            {bgTask.details}
+                        </p>
+                        {bgTask.status === 'processing' || bgTask.status === 'organizing' ? (
+                            <div className="w-full bg-stone-100 h-1.5 rounded-full mt-3 overflow-hidden">
+                                <div className="h-full bg-orange-400 animate-pulse w-2/3 rounded-full"></div>
+                            </div>
+                        ) : null}
+                    </div>
+                )}
+            </div>
+        </div>
+      )}
+
       {/* Mobile Header */}
       <div className="md:hidden h-16 bg-white border-b border-stone-200 flex items-center justify-between px-4 z-40 flex-shrink-0">
           <button onClick={() => setMobileMenuOpen(true)} className="p-2 text-stone-600">
@@ -276,7 +443,7 @@ const App: React.FC = () => {
             <div className="bg-orange-100 p-1.5 rounded-lg border border-orange-200">
               <Backpack className="text-orange-600 w-4 h-4" />
             </div>
-            <h1 className="font-hand font-bold text-xl text-stone-800">ScholarAI</h1>
+            <h1 className="font-hand font-bold text-xl text-stone-800">NotebookAI</h1>
           </div>
 
           <button onClick={() => setMobileRemindersOpen(true)} className="p-2 text-stone-600 relative">
@@ -321,6 +488,8 @@ const App: React.FC = () => {
                 onReminderClick={handleReminderClick}
                 showMobileReminders={mobileRemindersOpen}
                 onCloseMobileReminders={() => setMobileRemindersOpen(false)}
+                onProcessImage={handleProcessImage}
+                onProcessPdf={handleProcessPdf}
             />
             )}
 
@@ -330,6 +499,8 @@ const App: React.FC = () => {
                 onOpenNotepad={handleOpenNotepad}
                 registers={registers}
                 preSelectedSubject={activeSubject}
+                onProcessAudio={handleProcessAudio}
+                onProcessPdf={handleProcessPdf}
             />
             )}
 

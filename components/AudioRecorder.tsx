@@ -1,16 +1,17 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Mic, Square, Upload, FileAudio, Loader2, PlayCircle, AlertCircle, FileText, PenTool } from 'lucide-react';
-import { transcribeAudio, organizeNote, processPdf, splitPdf } from '../services/geminiService';
-import { Note, NoteSection, SubjectRegister } from '../types';
+import { Note, SubjectRegister } from '../types';
 
 interface AudioRecorderProps {
   onNoteCreated: (note: Note | Note[]) => void;
   onOpenNotepad: (subject?: string) => void;
   registers: SubjectRegister[];
   preSelectedSubject?: string | null;
+  onProcessAudio: (blob: Blob, subject?: string) => void;
+  onProcessPdf: (blob: Blob, subject?: string) => void;
 }
 
-const AudioRecorder: React.FC<AudioRecorderProps> = ({ onNoteCreated, onOpenNotepad, registers, preSelectedSubject }) => {
+const AudioRecorder: React.FC<AudioRecorderProps> = ({ onNoteCreated, onOpenNotepad, registers, preSelectedSubject, onProcessAudio, onProcessPdf }) => {
   const [mode, setMode] = useState<'SELECT' | 'RECORD' | 'UPLOAD_AUDIO' | 'UPLOAD_PDF'>('SELECT');
   const [selectedSubject, setSelectedSubject] = useState(preSelectedSubject || '');
   
@@ -22,8 +23,6 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({ onNoteCreated, onOpenNote
   // PDF State
   const [pdfBlob, setPdfBlob] = useState<Blob | null>(null);
 
-  const [status, setStatus] = useState<'idle' | 'recording' | 'processing' | 'organizing' | 'done' | 'error'>('idle');
-  const [statusMessage, setStatusMessage] = useState<string>('');
   const [errorMessage, setErrorMessage] = useState('');
   
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -63,7 +62,6 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({ onNoteCreated, onOpenNote
 
       mediaRecorder.start();
       setIsRecording(true);
-      setStatus('recording');
       setMode('RECORD');
       
       timerRef.current = window.setInterval(() => {
@@ -72,7 +70,6 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({ onNoteCreated, onOpenNote
     } catch (err) {
       console.error(err);
       setErrorMessage("Microphone access denied or not available.");
-      setStatus('error');
     }
   };
 
@@ -87,7 +84,6 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({ onNoteCreated, onOpenNote
   const handleAudioUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       setAudioBlob(e.target.files[0]);
-      setStatus('idle');
       setMode('UPLOAD_AUDIO');
     }
   };
@@ -95,100 +91,20 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({ onNoteCreated, onOpenNote
   const handlePdfUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       setPdfBlob(e.target.files[0]);
-      setStatus('idle');
       setMode('UPLOAD_PDF');
     }
   };
 
-  const processContent = async () => {
-    try {
-      setStatus('processing');
-      setErrorMessage('');
-
-      // AUDIO PROCESSING FLOW
-      if (mode === 'RECORD' || mode === 'UPLOAD_AUDIO') {
-        if (!audioBlob) return;
-        setStatusMessage("Listening to audio...");
-        const transcript = await transcribeAudio(audioBlob, audioBlob.type);
-        
-        setStatus('organizing');
-        setStatusMessage("Writing notes...");
-        const organizedData = await organizeNote(transcript);
-        
-        const finalSubject = (selectedSubject || organizedData.subject) || 'General';
-
-        const newNote: Note = {
-            id: crypto.randomUUID(),
-            title: organizedData.title,
-            subject: finalSubject,
-            date: new Date().toLocaleDateString(),
-            type: 'audio',
-            originalTranscript: transcript,
-            summary: organizedData.summary,
-            sections: organizedData.sections,
-            tags: organizedData.tags,
-            audioUrl: URL.createObjectURL(audioBlob)
-        };
-        
-        onNoteCreated(newNote);
-        setStatus('done');
-
-      // PDF PROCESSING FLOW
-      } else if (mode === 'UPLOAD_PDF') {
-        if (!pdfBlob) return;
-        
-        setStatus('processing');
-        setStatusMessage("Analyzing document structure...");
-
-        // 1. Split PDF into chunks (5 pages each)
-        const pdfChunks = await splitPdf(pdfBlob, 5);
-        const createdNotes: Note[] = [];
-        
-        // 2. Process each chunk
-        for (let i = 0; i < pdfChunks.length; i++) {
-            setStatus('organizing');
-            setStatusMessage(`Processing part ${i + 1} of ${pdfChunks.length}...`);
-            
-            const chunk = pdfChunks[i];
-            const pdfData = await processPdf(chunk);
-            
-            let noteTitle = pdfData.title;
-            // Add (Part X) to title if it's a multi-part upload
-            if (pdfChunks.length > 1) {
-                noteTitle = `${noteTitle} (Part ${i + 1})`;
-            }
-
-            const finalSubject = (selectedSubject) || 'General'; // Use user selection or let dashboard group them later
-
-            const newNote: Note = {
-                id: crypto.randomUUID(),
-                title: noteTitle,
-                subject: finalSubject,
-                date: new Date().toLocaleDateString(),
-                type: 'pdf',
-                summary: pdfData.summary,
-                sections: pdfData.sections,
-                tags: pdfData.tags,
-                pdfUrl: URL.createObjectURL(chunk) // Save the specific chunk
-            };
-            
-            createdNotes.push(newNote);
-        }
-
-        // 3. Batch create notes
-        // We reverse because onNoteCreated typically prepends. 
-        // Actually App.tsx prepends spread. So we want Part 1 at bottom? 
-        // Usually recent first. So Part 3, Part 2, Part 1.
-        // Let's pass the array in natural order (Part 1, 2, 3) and let App handle it.
-        onNoteCreated(createdNotes.reverse()); // Reverse so Part 1 ends up being the "last added" (or handled by sorting in dashboard)
-        setStatus('done');
+  const handleSubmit = () => {
+      if ((mode === 'RECORD' || mode === 'UPLOAD_AUDIO') && audioBlob) {
+          onProcessAudio(audioBlob, selectedSubject);
+      } else if (mode === 'UPLOAD_PDF' && pdfBlob) {
+          onProcessPdf(pdfBlob, selectedSubject);
       }
-
-    } catch (err) {
-      console.error(err);
-      setErrorMessage("Failed to process content. Please try again.");
-      setStatus('error');
-    }
+      // Reset logic handled by parent switching view, but we can clean up if component stays
+      setAudioBlob(null);
+      setPdfBlob(null);
+      setRecordingTime(0);
   };
 
   if (mode === 'SELECT') {
@@ -255,13 +171,13 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({ onNoteCreated, onOpenNote
   return (
     <div className="flex flex-col items-center justify-center h-full p-8 max-w-2xl mx-auto">
       <div className="text-center mb-8">
-        <h2 className="text-3xl font-hand font-bold text-stone-800 mb-2">Processing...</h2>
+        <h2 className="text-3xl font-hand font-bold text-stone-800 mb-2">Capture Content</h2>
         <p className="text-stone-500">
-            {statusMessage || "Organizing your notes into the register."}
+           Review your input before processing.
         </p>
       </div>
 
-      {status === 'error' && (
+      {errorMessage && (
         <div className="bg-red-50 text-red-600 p-4 rounded-xl mb-6 flex items-center gap-2 shadow-sm border border-red-100">
           <AlertCircle className="w-5 h-5" />
           {errorMessage}
@@ -283,26 +199,17 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({ onNoteCreated, onOpenNote
         )}
 
         {/* Ready State */}
-        {!isRecording && (audioBlob || pdfBlob) && status !== 'processing' && status !== 'organizing' && (
+        {!isRecording && (audioBlob || pdfBlob) && (
           <div className="relative bg-stone-800 text-white w-32 h-32 rounded-full flex flex-col items-center justify-center shadow-xl">
             {mode === 'UPLOAD_PDF' ? <FileText className="w-10 h-10 mb-2 text-red-300" /> : <FileAudio className="w-10 h-10 mb-2 text-green-300" />}
             <span className="text-xs text-stone-400 font-bold uppercase tracking-wider">Ready</span>
-          </div>
-        )}
-
-        {(status === 'processing' || status === 'organizing') && (
-           <div className="relative bg-white border-4 border-stone-100 text-orange-500 w-32 h-32 rounded-full flex flex-col items-center justify-center shadow-xl">
-            <Loader2 className="w-10 h-10 mb-2 animate-spin" />
-            <span className="text-xs font-bold font-hand text-center px-2">
-                {status === 'processing' ? 'Thinking...' : 'Writing...'}
-            </span>
           </div>
         )}
       </div>
 
       {/* Controls */}
       <div className="space-y-4 w-full max-w-sm">
-        {(audioBlob || pdfBlob) && status !== 'processing' && status !== 'organizing' && (
+        {(audioBlob || pdfBlob) && (
           <div className="flex gap-4">
             <button 
               onClick={() => { 
@@ -310,15 +217,13 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({ onNoteCreated, onOpenNote
                   setPdfBlob(null); 
                   setRecordingTime(0); 
                   setMode('SELECT');
-                  setStatus('idle');
-                  setStatusMessage('');
               }}
               className="flex-1 py-3 rounded-xl border-2 border-stone-200 text-stone-600 hover:bg-stone-50 font-bold transition-colors font-hand text-lg"
             >
               Discard
             </button>
             <button 
-              onClick={processContent}
+              onClick={handleSubmit}
               className="flex-1 py-3 rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-bold text-lg font-hand shadow-lg shadow-orange-200 transition-all flex justify-center items-center gap-2 active:scale-95"
             >
               <PlayCircle className="w-5 h-5" />

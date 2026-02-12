@@ -58,7 +58,7 @@ const Sidebar: React.FC<SidebarProps> = ({
           <div className="bg-orange-100 p-2.5 rounded-xl border border-orange-200">
             <Backpack className="text-orange-600 w-6 h-6" />
           </div>
-          <h1 className="font-hand font-bold text-2xl tracking-wide">ScholarAI</h1>
+          <h1 className="font-hand font-bold text-2xl tracking-wide">NotebookAI</h1>
         </div>
       </div>
 
