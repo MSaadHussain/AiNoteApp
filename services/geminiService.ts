@@ -345,68 +345,76 @@ export const getQuickAnswer = async (context: string, question: string): Promise
 };
 
 /**
- * Generate flashcards from note content
+ * Generate flashcards from note content using DeepSeek
  */
 export const generateFlashcards = async (noteContent: string): Promise<Flashcard[]> => {
-  const systemPrompt = `You are a flashcard generator. Create 5 high-quality flashcards based on the provided notes.
+  const systemPrompt = `You are a study assistant. Generate flashcards from the given lecture/note content.
+Create 8-12 flashcards covering the key concepts, definitions, and important facts.
 
 Respond ONLY with a JSON object in this exact format:
 {
   "flashcards": [
-    {
-      "id": "card-1",
-      "front": "question or term",
-      "back": "answer or definition"
-    }
+    { "front": "Question or term", "back": "Answer or definition" }
   ]
-}`;
+}
+
+Make the questions clear and concise. The answers should be informative but brief.`;
 
   try {
-    const result = await chatJSON(systemPrompt, `Notes:\n\n${noteContent.substring(0, 10000)}`);
+    const result = await chatJSON(systemPrompt, `Notes:\n\n${noteContent.substring(0, 6000)}`);
     const parsed = safeParseJSON(result);
-    const cards = parsed.flashcards || parsed;
-    if (Array.isArray(cards)) {
-      return cards.map((c: any, i: number) => ({ ...c, id: c.id || `card-${Date.now()}-${i}` }));
-    }
-    return [];
+    const cards = parsed.flashcards || [];
+    return cards.map((c: any, i: number) => ({
+      id: `fc-${i}`,
+      front: c.front || 'Question',
+      back: c.back || 'Answer',
+    }));
   } catch (error) {
     console.error("Flashcard generation error:", error);
-    return [];
+    throw new Error("Failed to generate flashcards");
   }
 };
 
 /**
- * Generate quiz questions from note content
+ * Generate quiz questions (with solved answers) from note content using DeepSeek
  */
 export const generateQuiz = async (noteContent: string): Promise<QuizQuestion[]> => {
-  const systemPrompt = `You are a quiz generator. Create 5 multiple-choice questions based on the provided notes.
+  const systemPrompt = `You are a quiz generator. Create a multiple-choice quiz from the given lecture/note content.
+Generate 6-10 questions that test understanding of the key concepts.
 
 Respond ONLY with a JSON object in this exact format:
 {
   "questions": [
     {
-      "id": "quiz-1",
-      "question": "the question text",
-      "options": ["option A", "option B", "option C", "option D"],
+      "question": "What is...?",
+      "options": ["Option A", "Option B", "Option C", "Option D"],
       "correctAnswer": 0,
-      "explanation": "why this is correct"
+      "explanation": "Brief explanation of why this is correct"
     }
   ]
 }
 
-correctAnswer should be the zero-based index of the correct option.`;
+Rules:
+- Each question must have exactly 4 options
+- correctAnswer is the 0-based index of the correct option (0, 1, 2, or 3)
+- Provide a clear, educational explanation for each answer
+- Make questions progressively harder
+- Cover different topics from the content`;
 
   try {
-    const result = await chatJSON(systemPrompt, `Notes:\n\n${noteContent.substring(0, 10000)}`);
+    const result = await chatJSON(systemPrompt, `Notes:\n\n${noteContent.substring(0, 6000)}`);
     const parsed = safeParseJSON(result);
-    const questions = parsed.questions || parsed;
-    if (Array.isArray(questions)) {
-      return questions.map((q: any, i: number) => ({ ...q, id: q.id || `quiz-${Date.now()}-${i}` }));
-    }
-    return [];
+    const questions = parsed.questions || [];
+    return questions.map((q: any, i: number) => ({
+      id: `quiz-${i}`,
+      question: q.question || 'Question',
+      options: Array.isArray(q.options) ? q.options : ['A', 'B', 'C', 'D'],
+      correctAnswer: typeof q.correctAnswer === 'number' ? q.correctAnswer : 0,
+      explanation: q.explanation || 'No explanation provided.',
+    }));
   } catch (error) {
     console.error("Quiz generation error:", error);
-    return [];
+    throw new Error("Failed to generate quiz");
   }
 };
 
@@ -484,3 +492,5 @@ Return only the IDs of relevant notes. If none are relevant, return {"noteIds": 
     return [];
   }
 };
+
+
