@@ -210,12 +210,7 @@ const Sidebar: React.FC<SidebarProps> = ({
         </div>
       </nav>
 
-      <div className="p-4 border-t border-stone-200/60 hidden md:block">
-        <button className="flex items-center gap-3 text-sm text-stone-500 hover:text-orange-600 transition-colors px-3 py-2">
-          <Settings className="w-4 h-4" />
-          Settings
-        </button>
-      </div>
+      
     </>
   );
 
