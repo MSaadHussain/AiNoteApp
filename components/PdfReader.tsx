@@ -27,9 +27,15 @@ const PdfReader: React.FC<PdfReaderProps> = ({ note, onClose, onAddReminder, onC
     const [searchQuery, setSearchQuery] = useState('');
     const [searchHighlight, setSearchHighlight] = useState('');
 
-    // Chat state  
+    // Chat state — load from localStorage
+    const chatStorageKey = `notenest_chat_${note.id}`;
     const [chatInput, setChatInput] = useState('');
-    const [chatMessages, setChatMessages] = useState<ChatMsg[]>([]);
+    const [chatMessages, setChatMessages] = useState<ChatMsg[]>(() => {
+        try {
+            const saved = localStorage.getItem(chatStorageKey);
+            return saved ? JSON.parse(saved) : [];
+        } catch { return []; }
+    });
     const [isSummarizing, setIsSummarizing] = useState(false);
     const chatEndRef = useRef<HTMLDivElement>(null);
 
@@ -42,7 +48,14 @@ const PdfReader: React.FC<PdfReaderProps> = ({ note, onClose, onAddReminder, onC
 
     useEffect(() => {
         chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, [chatMessages]);
+        // Save chat messages to localStorage (skip if any are still thinking)
+        const hasThinking = chatMessages.some(m => m.isThinking);
+        if (!hasThinking) {
+            try {
+                localStorage.setItem(chatStorageKey, JSON.stringify(chatMessages));
+            } catch { /* storage full, ignore */ }
+        }
+    }, [chatMessages, chatStorageKey]);
 
     const handleTextSelection = () => {
         const selection = window.getSelection();
@@ -297,7 +310,7 @@ const PdfReader: React.FC<PdfReaderProps> = ({ note, onClose, onAddReminder, onC
                     </div>
                     {chatMessages.length > 0 && (
                         <button
-                            onClick={() => setChatMessages([])}
+                            onClick={() => { setChatMessages([]); localStorage.removeItem(chatStorageKey); }}
                             className="text-xs text-stone-400 hover:text-stone-600 px-2 py-1 rounded hover:bg-stone-100"
                         >
                             Clear
