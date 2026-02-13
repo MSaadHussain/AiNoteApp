@@ -49,8 +49,8 @@ const Sidebar: React.FC<SidebarProps> = ({
     }
   };
 
-  // Content for the Sidebar/Drawer
-  const SidebarContent = () => (
+  // Use a variable (not a component function) to avoid remounting on re-render
+  const sidebarContent = (
     <>
       {/* Brand Header (Desktop Only) */}
       <div className="hidden md:block p-6 pt-8 pb-4">
@@ -73,7 +73,7 @@ const Sidebar: React.FC<SidebarProps> = ({
 
           <input
             type="text"
-            placeholder="Search notes... (Press Enter for AI)"
+            placeholder="Search notes... (Press Enter)"
             value={searchQuery}
             onChange={(e) => onSearch(e.target.value)}
             onKeyDown={handleKeyDown}
@@ -223,7 +223,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     <>
       {/* Desktop Sidebar (Fixed) */}
       <div className="hidden md:flex w-72 bg-stone-50 text-stone-700 flex-col h-full border-r border-stone-200/60 flex-shrink-0 shadow-[4px_0_24px_rgba(0,0,0,0.02)] z-30">
-        <SidebarContent />
+        {sidebarContent}
       </div>
 
       {/* Mobile Side Drawer (Overlay) */}
@@ -237,7 +237,7 @@ const Sidebar: React.FC<SidebarProps> = ({
             <div className="p-4 pt-6 pb-0">
               <h2 className="font-hand font-bold text-xl text-stone-800">My Shelf</h2>
             </div>
-            <SidebarContent />
+            {sidebarContent}
           </div>
         </div>
       )}

@@ -29,10 +29,26 @@ interface BackgroundTask {
 
 const App: React.FC = () => {
     const [view, setView] = useState<AppView>(AppView.DASHBOARD);
-    const [notes, setNotes] = useState<Note[]>([]);
+    // Initialize state directly from localStorage (lazy initializers prevent race conditions)
+    const [notes, setNotes] = useState<Note[]>(() => {
+        try {
+            const saved = localStorage.getItem('scholarai_notes');
+            return saved ? JSON.parse(saved) : [];
+        } catch { return []; }
+    });
+    const [customRegisterNames, setCustomRegisterNames] = useState<string[]>(() => {
+        try {
+            const saved = localStorage.getItem('scholarai_custom_registers');
+            return saved ? JSON.parse(saved) : [];
+        } catch { return []; }
+    });
+    const [reminders, setReminders] = useState<Reminder[]>(() => {
+        try {
+            const saved = localStorage.getItem('scholarai_reminders');
+            return saved ? JSON.parse(saved) : [];
+        } catch { return []; }
+    });
     const [registers, setRegisters] = useState<SubjectRegister[]>([]);
-    const [customRegisterNames, setCustomRegisterNames] = useState<string[]>([]);
-    const [reminders, setReminders] = useState<Reminder[]>([]);
 
     const [activeSubject, setActiveSubject] = useState<string | null>(null);
     const [selectedNote, setSelectedNote] = useState<Note | null>(null);
@@ -53,34 +69,22 @@ const App: React.FC = () => {
     const [bgTask, setBgTask] = useState<BackgroundTask | null>(null);
     const [isBgTaskExpanded, setIsBgTaskExpanded] = useState(false);
 
-    useEffect(() => {
-        const savedNotes = localStorage.getItem('scholarai_notes');
-        const savedRegisters = localStorage.getItem('scholarai_custom_registers');
-        const savedReminders = localStorage.getItem('scholarai_reminders');
-
-        if (savedRegisters) {
-            setCustomRegisterNames(JSON.parse(savedRegisters));
-        }
-
-        if (savedNotes) {
-            const parsedNotes = JSON.parse(savedNotes);
-            setNotes(parsedNotes);
-        }
-
-        if (savedReminders) {
-            setReminders(JSON.parse(savedReminders));
-        }
-    }, []);
+    // Track if initial load is done to prevent saving empty state
+    const hasLoaded = React.useRef(false);
+    useEffect(() => { hasLoaded.current = true; }, []);
 
     useEffect(() => {
+        if (!hasLoaded.current) return;
         localStorage.setItem('scholarai_notes', JSON.stringify(notes));
     }, [notes]);
 
     useEffect(() => {
+        if (!hasLoaded.current) return;
         localStorage.setItem('scholarai_custom_registers', JSON.stringify(customRegisterNames));
     }, [customRegisterNames]);
 
     useEffect(() => {
+        if (!hasLoaded.current) return;
         localStorage.setItem('scholarai_reminders', JSON.stringify(reminders));
     }, [reminders]);
 
@@ -245,9 +249,12 @@ const App: React.FC = () => {
 
     const handleSearchChange = (query: string) => {
         setSearchQuery(query);
-        setAiFilteredIds(null);
-        if (query) {
+        if (query.trim()) {
             setView(AppView.DASHBOARD);
+            // Find a register whose name matches the query
+            const match = registers.find(r => r.name.toLowerCase().includes(query.trim().toLowerCase()));
+            setActiveSubject(match ? match.name : '__no_match__');
+        } else {
             setActiveSubject(null);
         }
     };
@@ -346,19 +353,10 @@ const App: React.FC = () => {
 
     const getDisplayNotes = () => {
         let filtered = notes;
-        if (aiFilteredIds !== null) {
-            return filtered.filter(n => aiFilteredIds.includes(n.id));
-        }
-        if (searchQuery) {
-            const lowerQ = searchQuery.toLowerCase();
-            filtered = filtered.filter(n =>
-                n.title.toLowerCase().includes(lowerQ) ||
-                n.summary.toLowerCase().includes(lowerQ) ||
-                n.subject.toLowerCase().includes(lowerQ) ||
-                n.tags.some(t => t.toLowerCase().includes(lowerQ))
-            );
-        } else if (activeSubject) {
+        if (activeSubject && activeSubject !== '__no_match__') {
             filtered = filtered.filter(n => n.subject === activeSubject);
+        } else if (activeSubject === '__no_match__') {
+            return []; // No matching register
         }
         return filtered;
     };
