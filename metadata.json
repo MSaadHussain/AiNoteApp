@@ -1,5 +1,5 @@
 {
-  "name": "NotebookAI",
+  "name": "NoteNest",
   "description": "An intelligent student notebook that records, transcribes, and organizes lectures into virtual registers using Gemini AI.",
   "requestFramePermissions": [
     "microphone"
