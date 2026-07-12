@@ -2,7 +2,7 @@
 
 > An AI-powered note-taking assistant built to help students capture, organize, and understand their lectures effortlessly.
 
-![NoteNest Banner](https://via.placeholder.com/1200x400)
+![NoteNest Banner](https://d112y698adiu2z.cloudfront.net/photos/production/software_thumbnail_photos/004/242/672/datas/medium.jpg)
 
 ---
 
@@ -105,9 +105,7 @@ Built by a team of students during a hackathon.
 ### Contributors
 
 - Sikandar Khan
-- Team Member 2
-- Team Member 3
-- Team Member 4
+- Saad Hussain
 
 ---
 
