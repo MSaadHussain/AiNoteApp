@@ -75,7 +75,7 @@ _Add screenshots of the application here._
 ### Clone the repository
 
 ```bash
-git clone https://github.com/yourusername/notenest-ai.git
+https://github.com/MSaadHussain/AiNoteApp.git
 ```
 
 ### Navigate into the project
