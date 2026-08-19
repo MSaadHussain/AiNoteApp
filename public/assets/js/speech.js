@@ -66,10 +66,9 @@ class SpeechRecorder {
   }
 
   start() {
-    if (!this.recognition) {
-      alert('Speech recognition is not supported in your browser. Please use Google Chrome or Microsoft Edge.');
-      return false;
-    }
+    // The caller surfaces the unsupported message in the UI; a blocking
+    // alert() would be unstyled and is suppressed in some embedded browsers.
+    if (!this.recognition) return false;
 
     this.transcript = '';
     this.interimTranscript = '';

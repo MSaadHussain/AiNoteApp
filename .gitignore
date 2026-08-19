@@ -1,0 +1,14 @@
+# Node toolchain (front-end build only — the PHP app runs without it)
+node_modules/
+
+# Local environment
+.env
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.swp
+
+# Note: public/assets/css/app.css and public/assets/vendor/ ARE committed.
+# They are build output, but committing them means a PHP-only deployment
+# needs no Node toolchain on the server.

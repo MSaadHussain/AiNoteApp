@@ -1,192 +1,244 @@
 <?php
 /**
- * Notepad View - Blank Lined Paper with Instant '?' AI Integration
+ * Notepad - distraction-light writing surface with inline AI answering.
  */
 $existingNote = $note ?? null;
+$noteSubject = $subject ?? 'General';
 ?>
 
-<div class="flex flex-col h-full bg-desk relative">
-  
-  <!-- Header (Toolbar) -->
-  <div class="absolute top-0 left-0 right-0 h-16 bg-white/80 backdrop-blur-md border-b border-stone-200 z-10 flex items-center justify-between px-6 shadow-sm">
-    <div class="flex items-center gap-4 flex-1">
-      <a href="/" class="p-2 hover:bg-stone-100 rounded-full text-stone-500 transition-colors">
-        <i data-lucide="arrow-left" class="w-5 h-5"></i>
+<div class="flex h-full flex-col">
+
+  <!-- The visible title is an editable input, so the page still needs a real
+       heading for the document outline. -->
+  <h1 class="sr-only"><?= $existingNote ? 'Editing: ' . htmlspecialchars($existingNote->title) : 'New note' ?></h1>
+
+  <!-- ============ Toolbar ============ -->
+  <header class="z-20 flex flex-shrink-0 flex-wrap items-center justify-between gap-2 border-b border-line bg-surface/90 px-3 py-2.5 backdrop-blur sm:px-4">
+    <div class="flex min-w-0 flex-1 items-center gap-2">
+      <a href="/" class="btn-icon flex-shrink-0" aria-label="Back to all notes">
+        <i data-lucide="arrow-left" class="h-5 w-5" aria-hidden="true"></i>
       </a>
-      <input
-        type="text"
-        id="notepad-title"
-        value="<?= htmlspecialchars($existingNote ? $existingNote->title : 'Untitled Note') ?>"
-        placeholder="Note Title..."
-        class="text-2xl font-hand font-bold bg-transparent border-none focus:outline-none text-stone-800 placeholder-stone-400 w-full max-w-md"
-      />
-      <span class="hidden md:inline-block px-3 py-1 bg-stone-100 rounded-lg text-xs font-bold text-stone-500 uppercase">
-        <?= htmlspecialchars($subject ?? 'General') ?>
-      </span>
+
+      <div class="min-w-0 flex-1">
+        <label for="notepad-title" class="sr-only">Note title</label>
+        <input id="notepad-title"
+               type="text"
+               value="<?= htmlspecialchars($existingNote ? $existingNote->title : '') ?>"
+               placeholder="Untitled note"
+               maxlength="180"
+               class="w-full max-w-md truncate rounded-control border border-transparent bg-transparent px-2 py-1.5 text-base font-bold text-content transition-colors placeholder:font-medium placeholder:text-content-subtle hover:border-line focus:border-brand-500 focus:bg-surface focus:outline-none focus:ring-2 focus:ring-brand-200">
+      </div>
+
+      <span class="badge-neutral hidden flex-shrink-0 sm:inline-flex"><?= htmlspecialchars($noteSubject) ?></span>
     </div>
 
-    <div class="flex items-center gap-3">
-      <!-- Autosave Status -->
-      <div id="autosave-status" class="hidden md:flex items-center gap-1.5 text-xs text-stone-400 font-medium mr-2">
-        <i data-lucide="cloud" class="w-3.5 h-3.5"></i>
-        <span id="autosave-text">Ready</span>
+    <div class="flex flex-shrink-0 items-center gap-2">
+      <!-- Draft status. aria-live so the save state is announced, not just seen. -->
+      <p id="draft-status"
+         class="hidden items-center gap-1.5 text-2xs font-semibold normal-case tracking-normal text-content-subtle sm:flex"
+         role="status"
+         aria-live="polite"></p>
+
+      <div id="ai-thinking"
+           hidden
+           class="items-center gap-1.5 rounded-full bg-brand-50 px-3 py-1.5 text-2xs font-bold uppercase tracking-wider text-brand-700 sm:flex"
+           role="status"
+           aria-live="polite">
+        <i data-lucide="loader-circle" class="h-3.5 w-3.5 animate-spin" aria-hidden="true"></i>
+        Answering
       </div>
 
-      <!-- AI Thinking Status -->
-      <div id="ai-thinking-indicator" class="hidden flex items-center gap-2 text-orange-600 text-sm animate-pulse px-3 py-1 bg-orange-50 rounded-full border border-orange-200">
-        <i data-lucide="bot" class="w-4 h-4"></i>
-        <span class="font-hand font-bold">Thinking...</span>
-      </div>
-
-      <button
-        onclick="saveNotepad()"
-        class="flex items-center gap-2 px-6 py-2 bg-stone-800 hover:bg-stone-900 text-white rounded-lg font-hand text-lg transition-colors shadow-lg shadow-stone-300 active:scale-95"
-      >
-        <i data-lucide="save" class="w-4 h-4"></i>
+      <button type="button" id="notepad-save" class="btn-primary" onclick="saveNotepad(this)">
+        <i data-lucide="check" class="h-4 w-4" aria-hidden="true"></i>
         Save
       </button>
     </div>
-  </div>
+  </header>
 
-  <!-- Writing Area -->
-  <div class="flex-1 overflow-hidden pt-20 pb-8 px-4 md:px-0">
-    <div class="max-w-3xl mx-auto bg-paper shadow-2xl h-full relative lined-paper rounded-sm overflow-hidden flex flex-col">
-      
-      <!-- Top hole punches visual -->
-      <div class="absolute top-4 left-0 right-0 flex justify-center gap-20 pointer-events-none opacity-20">
-        <div class="w-4 h-4 rounded-full bg-stone-900"></div>
-        <div class="w-4 h-4 rounded-full bg-stone-900"></div>
-      </div>
+  <!-- ============ Writing surface ============ -->
+  <div class="min-h-0 flex-1 overflow-y-auto bg-surface-sunken px-0 py-0 sm:px-6 sm:py-6">
+    <div class="mx-auto flex h-full max-w-3xl flex-col overflow-hidden border-line bg-surface-paper shadow-card sm:h-auto sm:min-h-full sm:rounded-card sm:border">
+      <label for="notepad-textarea" class="sr-only">Note content</label>
+      <textarea id="notepad-textarea"
+                class="paper-sheet w-full flex-1 resize-none bg-transparent px-5 py-4 font-reading text-lg text-content placeholder:font-sans placeholder:text-base placeholder:leading-normal placeholder:text-content-subtle focus:outline-none sm:px-10 sm:py-8"
+                placeholder="Start writing…&#10;&#10;Tip: end a question with ? and AI will answer it inline."
+                spellcheck="true"
+                aria-describedby="notepad-help"><?= htmlspecialchars($existingNote ? ($existingNote->rawContent ?: $existingNote->summary) : '') ?></textarea>
+    </div>
 
-      <textarea
-        id="notepad-textarea"
-        placeholder="Start writing... (Tip: Just type '?' to get an instant AI answer inline)"
-        class="w-full h-full p-12 pt-16 text-xl text-ink leading-[2rem] resize-none focus:outline-none bg-transparent font-hand"
-        spellcheck="false"
-      ><?= htmlspecialchars($existingNote ? ($existingNote->rawContent ?: $existingNote->summary) : '') ?></textarea>
+    <div class="mx-auto max-w-3xl px-4 pb-24 pt-3 sm:px-0 md:pb-6">
+      <p id="notepad-help" class="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs font-medium normal-case tracking-normal text-content-subtle">
+        <span class="flex items-center gap-1.5">
+          <i data-lucide="sparkles" class="h-3.5 w-3.5" aria-hidden="true"></i>
+          Type a question ending in <kbd class="rounded border border-line bg-surface px-1 font-sans font-bold">?</kbd> for an inline answer
+        </span>
+        <span class="flex items-center gap-1.5">
+          <i data-lucide="save" class="h-3.5 w-3.5" aria-hidden="true"></i>
+          Drafts autosave locally &middot; <kbd class="rounded border border-line bg-surface px-1 font-sans font-bold">Ctrl</kbd>+<kbd class="rounded border border-line bg-surface px-1 font-sans font-bold">S</kbd> to save
+        </span>
+        <span id="word-count" class="tabular-nums"></span>
+      </p>
     </div>
   </div>
 </div>
 
 <script>
-  const noteId = '<?= $existingNote ? $existingNote->id : "" ?>';
-  const noteSubject = '<?= htmlspecialchars($subject ?? "General") ?>';
-  const AUTOSAVE_KEY = 'notenest_draft_' + (noteId || 'new');
+  const noteId = <?= json_encode($existingNote ? $existingNote->id : '') ?>;
+  const noteSubject = <?= json_encode($noteSubject) ?>;
+  const DRAFT_KEY = 'notenest_draft_' + (noteId || 'new');
 
   const textarea = document.getElementById('notepad-textarea');
   const titleInput = document.getElementById('notepad-title');
-  const autosaveStatus = document.getElementById('autosave-status');
-  const autosaveText = document.getElementById('autosave-text');
-  const thinkingIndicator = document.getElementById('ai-thinking-indicator');
+  const draftStatus = document.getElementById('draft-status');
+  const thinking = document.getElementById('ai-thinking');
+  const wordCount = document.getElementById('word-count');
 
-  // Restore Draft if available
-  if (!noteId) {
-    const saved = localStorage.getItem(AUTOSAVE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.content) textarea.value = parsed.content;
-        if (parsed.title) titleInput.value = parsed.title;
-      } catch (e) {}
+  let dirty = false;
+
+  /* ---- Word count ---------------------------------------------------- */
+  function updateWordCount() {
+    const words = textarea.value.trim().split(/\s+/).filter(Boolean).length;
+    wordCount.textContent = words + (words === 1 ? ' word' : ' words');
+  }
+
+  /* ---- Drafts -------------------------------------------------------- */
+  function restoreDraft() {
+    if (noteId) return;
+    try {
+      const saved = JSON.parse(localStorage.getItem(DRAFT_KEY) || 'null');
+      if (!saved) return;
+      if (saved.content) textarea.value = saved.content;
+      if (saved.title) titleInput.value = saved.title;
+      setDraftStatus('Restored unsaved draft');
+    } catch (e) {
+      localStorage.removeItem(DRAFT_KEY);
     }
   }
 
-  // Autosave interval every 15 seconds
-  setInterval(() => {
-    const content = textarea.value;
-    const title = titleInput.value;
-    if (content.trim()) {
-      localStorage.setItem(AUTOSAVE_KEY, JSON.stringify({ title, content, time: Date.now() }));
-      autosaveStatus.classList.remove('hidden');
-      autosaveText.textContent = 'Saved draft ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    }
-  }, 15000);
+  function setDraftStatus(message) {
+    draftStatus.textContent = message;
+    draftStatus.classList.remove('hidden');
+    draftStatus.classList.add('sm:flex');
+  }
 
-  // Instant '?' AI Question Trigger
-  textarea.addEventListener('keydown', async (e) => {
-    if (e.key === '?') {
-      e.preventDefault();
-      const pos = textarea.selectionStart;
-      const val = textarea.value;
+  function persistDraft() {
+    if (!dirty || !textarea.value.trim()) return;
+    localStorage.setItem(DRAFT_KEY, JSON.stringify({
+      title: titleInput.value,
+      content: textarea.value,
+      time: Date.now(),
+    }));
+    dirty = false;
+    setDraftStatus('Draft saved ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+  }
 
-      // 1. Insert '?'
-      const before = val.substring(0, pos);
-      const after = val.substring(pos);
-      textarea.value = before + '?' + after;
-      textarea.selectionStart = textarea.selectionEnd = pos + 1;
+  [textarea, titleInput].forEach((el) =>
+    el.addEventListener('input', () => {
+      dirty = true;
+      if (el === textarea) updateWordCount();
+    })
+  );
 
-      // 2. Find preceding sentence question
-      const lastPunct = Math.max(
-        before.lastIndexOf('.'),
-        before.lastIndexOf('!'),
-        before.lastIndexOf('?'),
-        before.lastIndexOf('\n')
-      );
-      const question = before.substring(lastPunct + 1).trim();
-
-      if (question.length > 2) {
-        thinkingIndicator.classList.remove('hidden');
-        try {
-          const res = await fetch('/api/ai/answer', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              context: textarea.value,
-              question: question + '?'
-            })
-          });
-          const data = await res.json();
-          thinkingIndicator.classList.add('hidden');
-
-          if (data.answer) {
-            const currentPos = textarea.selectionStart;
-            const b = textarea.value.substring(0, currentPos);
-            const a = textarea.value.substring(currentPos);
-            textarea.value = b + "\n[AI]: " + data.answer + "\n\n" + a;
-            textarea.selectionStart = textarea.selectionEnd = currentPos + data.answer.length + 10;
-          }
-        } catch (err) {
-          thinkingIndicator.classList.add('hidden');
-        }
-      }
+  window.setInterval(persistDraft, 10000);
+  window.addEventListener('beforeunload', (event) => {
+    persistDraft();
+    if (dirty) {
+      event.preventDefault();
+      event.returnValue = '';
     }
   });
 
-  async function saveNotepad() {
-    const title = titleInput.value.trim() || 'Untitled Note';
+  /* ---- Inline AI answering ------------------------------------------- */
+  // Fires when the user types "?" at the end of a question.
+  textarea.addEventListener('keydown', async (event) => {
+    if (event.key !== '?') return;
+
+    const pos = textarea.selectionStart;
+    const before = textarea.value.slice(0, pos);
+
+    const lastBreak = Math.max(
+      before.lastIndexOf('.'), before.lastIndexOf('!'),
+      before.lastIndexOf('?'), before.lastIndexOf('\n')
+    );
+    const question = before.slice(lastBreak + 1).trim();
+    if (question.length < 3) return;   // let the "?" type normally
+
+    event.preventDefault();
+
+    // Insert the "?" the user pressed, then append the answer after it.
+    const after = textarea.value.slice(pos);
+    textarea.value = before + '?' + after;
+    textarea.selectionStart = textarea.selectionEnd = pos + 1;
+    dirty = true;
+    updateWordCount();
+
+    thinking.hidden = false;
+    try {
+      const data = await NoteNest.api('/api/ai/answer', {
+        method: 'POST',
+        body: { context: textarea.value.slice(0, 6000), question: question + '?' },
+      });
+
+      if (data.answer) {
+        const insertAt = textarea.selectionStart;
+        const block = '\n\nAI: ' + data.answer + '\n\n';
+        textarea.value = textarea.value.slice(0, insertAt) + block + textarea.value.slice(insertAt);
+        textarea.selectionStart = textarea.selectionEnd = insertAt + block.length;
+        textarea.focus();
+        dirty = true;
+        updateWordCount();
+      }
+    } catch (e) {
+      NoteNest.toast('Could not answer that', 'error', e.message);
+    } finally {
+      thinking.hidden = true;
+    }
+  });
+
+  /* ---- Save ---------------------------------------------------------- */
+  async function saveNotepad(button) {
+    const title = titleInput.value.trim() || 'Untitled note';
     const content = textarea.value.trim();
 
     if (!content) {
-      alert('Please write something before saving.');
+      NoteNest.toast('Nothing to save', 'error', 'Write something before saving this note.');
+      textarea.focus();
       return;
     }
 
-    try {
-      const res = await fetch('/api/notes', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: noteId || undefined,
-          title,
-          subject: noteSubject,
-          date: new Date().toLocaleDateString(),
-          type: 'text',
-          rawContent: content,
-          summary: content.substring(0, 150) + '...',
-          sections: [],
-          tags: ['notepad', 'notes']
-        })
-      });
+    await NoteNest.withBusy(button, 'Saving…', async () => {
+      try {
+        const data = await NoteNest.api('/api/notes', {
+          method: 'POST',
+          body: {
+            id: noteId || undefined,
+            title,
+            subject: noteSubject,
+            date: new Date().toLocaleDateString(),
+            type: 'text',
+            rawContent: content,
+            summary: content.slice(0, 150) + (content.length > 150 ? '…' : ''),
+            sections: [],
+            tags: ['notepad'],
+          },
+        });
 
-      const data = await res.json();
-      if (data.success) {
-        localStorage.removeItem(AUTOSAVE_KEY);
+        localStorage.removeItem(DRAFT_KEY);
+        dirty = false;
         window.location.href = '/note/' + data.note.id;
-      } else {
-        alert(data.error || 'Failed to save note');
+      } catch (e) {
+        NoteNest.toast('Could not save note', 'error', e.message);
       }
-    } catch (e) {
-      alert('Error saving note');
-    }
+    });
   }
+
+  document.addEventListener('keydown', (event) => {
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
+      event.preventDefault();
+      saveNotepad(document.getElementById('notepad-save'));
+    }
+  });
+
+  restoreDraft();
+  updateWordCount();
 </script>

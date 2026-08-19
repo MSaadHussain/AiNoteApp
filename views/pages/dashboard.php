@@ -1,397 +1,350 @@
 <?php
 /**
- * Dashboard View - NoteNest Study Desk
+ * Dashboard - subject overview, recent notes, and reminders.
  */
+require_once dirname(__DIR__) . '/partials/helpers.php';
+
 $displayRegisters = $registers ?? [];
 $activeSub = $activeSubject ?? null;
+$noteList = $notes ?? [];
+$reminderList = $reminders ?? [];
+$query = trim((string)($_GET['q'] ?? ''));
+
+$openReminders = array_values(array_filter($reminderList, fn($r) => !$r->completed));
+$totalNotes = $activeSub
+    ? count($noteList)
+    : array_sum(array_map(fn($r) => count($r->noteIds), $displayRegisters));
 ?>
 
-<div id="dashboard-desk" class="h-full overflow-y-auto bg-desk relative pb-20 md:pb-0 select-none">
-  
-  <!-- Hidden File Inputs for Context Menu Uploads -->
-  <input type="file" id="context-image-input" accept="image/*" class="hidden" onchange="handleContextImageUpload(this)" />
-  <input type="file" id="context-pdf-input" accept="application/pdf" class="hidden" onchange="handleContextPdfUpload(this)" />
+<div class="h-full overflow-y-auto scrollbar-slim">
+  <div class="mx-auto max-w-7xl px-4 pb-24 pt-6 sm:px-6 md:pb-10 lg:px-8">
 
-  <div class="p-6 md:p-8 max-w-6xl mx-auto pr-0 md:pr-80">
-    
-    <!-- Welcome Header -->
-    <header class="mb-6 md:mb-10 flex flex-col md:flex-row md:justify-between md:items-end gap-4">
-      <div>
-        <h1 class="text-3xl md:text-4xl font-hand font-bold text-stone-800 mb-2">
-          <?= $activeSub ? htmlspecialchars($activeSub) : "Study Desk" ?>
-        </h1>
-        <p class="text-stone-500 text-sm md:text-base">
-          <?= $activeSub ? "You have " . count($notes) . " notes in this register." : "Welcome back to your digital study workspace!" ?>
-        </p>
-      </div>
-      <div class="hidden md:block text-sm font-hand text-stone-400 rotate-2">
-        <?= date('l, F j') ?>
+    <!-- ============ Page header ============ -->
+    <header class="mb-8">
+      <?php if ($activeSub): ?>
+        <nav aria-label="Breadcrumb" class="mb-3">
+          <ol class="flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-wider text-content-subtle">
+            <li><a href="/" class="rounded transition-colors hover:text-brand-700">All notes</a></li>
+            <li aria-hidden="true"><i data-lucide="chevron-right" class="h-3 w-3"></i></li>
+            <li aria-current="page" class="text-content-muted"><?= htmlspecialchars($activeSub) ?></li>
+          </ol>
+        </nav>
+      <?php endif; ?>
+
+      <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div class="min-w-0">
+          <h1 class="text-2xl font-extrabold tracking-tight sm:text-3xl">
+            <?= $activeSub ? htmlspecialchars($activeSub) : 'Your workspace' ?>
+          </h1>
+          <p class="mt-1.5 text-sm text-content-muted">
+            <?php if ($query): ?>
+              <?= count($noteList) ?> result<?= count($noteList) === 1 ? '' : 's' ?>
+              for &ldquo;<?= htmlspecialchars($query) ?>&rdquo;
+            <?php elseif ($activeSub): ?>
+              <?= count($noteList) ?> note<?= count($noteList) === 1 ? '' : 's' ?> in this subject
+            <?php else: ?>
+              <?= count($displayRegisters) ?> subject<?= count($displayRegisters) === 1 ? '' : 's' ?>
+              &middot; <?= $totalNotes ?> note<?= $totalNotes === 1 ? '' : 's' ?>
+              &middot; <?= count($openReminders) ?> reminder<?= count($openReminders) === 1 ? '' : 's' ?> due
+            <?php endif; ?>
+          </p>
+        </div>
+
+        <div class="flex flex-shrink-0 flex-wrap items-center gap-2">
+          <?php if ($activeSub): ?>
+            <a href="/notepad?subject=<?= urlencode($activeSub) ?>" class="btn-secondary">
+              <i data-lucide="pen-line" class="h-4 w-4" aria-hidden="true"></i>
+              New note
+            </a>
+            <div class="relative">
+              <button type="button"
+                      class="btn-secondary"
+                      data-menu-trigger="subject-export-menu"
+                      aria-haspopup="menu"
+                      aria-expanded="false">
+                <i data-lucide="download" class="h-4 w-4" aria-hidden="true"></i>
+                Export
+              </button>
+              <div id="subject-export-menu" hidden role="menu" class="menu absolute right-0 top-full mt-1.5">
+                <a role="menuitem" class="menu-item" target="_blank" rel="noopener"
+                   href="/export/register/<?= urlencode($activeSub) ?>/pdf">
+                  <i data-lucide="file-text" class="h-4 w-4" aria-hidden="true"></i> Export as PDF
+                </a>
+                <a role="menuitem" class="menu-item"
+                   href="/export/register/<?= urlencode($activeSub) ?>/markdown">
+                  <i data-lucide="file-down" class="h-4 w-4" aria-hidden="true"></i> Export as Markdown
+                </a>
+              </div>
+            </div>
+          <?php else: ?>
+            <a href="/recorder" class="btn-primary">
+              <i data-lucide="mic" class="h-4 w-4" aria-hidden="true"></i>
+              Record a lecture
+            </a>
+          <?php endif; ?>
+        </div>
       </div>
     </header>
 
-    <!-- Registers (Notebooks) Stack -->
-    <?php if (!$activeSub): ?>
-      <section class="mb-12">
-        <h2 class="text-lg font-bold text-stone-400 uppercase tracking-widest text-xs mb-6">My Notebooks</h2>
+    <div class="grid grid-cols-1 gap-8 xl:grid-cols-[minmax(0,1fr)_19rem]">
+      <div class="min-w-0 space-y-10">
 
-        <?php if (empty($displayRegisters)): ?>
-          <div class="text-center py-12 bg-white/50 border-2 border-dashed border-stone-200 rounded-2xl">
-            <p class="text-stone-400 mb-4 font-hand text-xl">Your desk is empty.</p>
-            <a href="/recorder" class="text-orange-600 font-bold hover:underline">Start a new notebook</a>
-          </div>
-        <?php else: ?>
-          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <?php foreach ($displayRegisters as $reg): ?>
-              <div class="relative group perspective-1000">
-                
-                <!-- Notebook Cover -->
-                <div
-                  onclick="window.location.href='/?subject=<?= urlencode($reg->name) ?>'"
-                  class="relative h-56 md:h-64 rounded-r-2xl rounded-l-md shadow-notebook transition-all duration-300 transform group-hover:-translate-y-2 group-hover:shadow-xl <?= $reg->color ?> border-l-8 border-black/10 cursor-pointer"
-                >
-                  <!-- Notebook Binding Gradient -->
-                  <div class="absolute left-0 top-0 bottom-0 w-4 bg-gradient-to-r from-black/20 to-transparent pointer-events-none"></div>
-                  <div class="absolute left-2 top-0 bottom-0 w-[1px] bg-white/20 pointer-events-none"></div>
+        <!-- ============ Subjects ============ -->
+        <?php if (!$activeSub && !$query): ?>
+          <section aria-labelledby="subjects-title">
+            <h2 id="subjects-title" class="section-label mb-4">
+              <i data-lucide="library" class="h-3.5 w-3.5" aria-hidden="true"></i>
+              Subjects
+            </h2>
 
-                  <!-- Center Paper Label -->
-                  <div class="absolute top-10 left-0 right-0 p-6 pointer-events-none">
-                    <div class="bg-white/90 backdrop-blur-sm p-4 shadow-sm transform -rotate-1 rounded-sm">
-                      <h3 class="font-hand font-bold text-2xl text-stone-800 leading-none text-center">
-                        <?= htmlspecialchars($reg->name) ?>
+            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <?php foreach ($displayRegisters as $i => $reg):
+                $accent = subject_accent($reg->color);
+                $count = count($reg->noteIds);
+                $menuId = 'reg-menu-' . md5($reg->name);
+              ?>
+                <article class="card-interactive group relative animate-rise-in overflow-hidden"
+                         style="animation-delay: <?= min($i * 50, 300) ?>ms">
+                  <!-- Accent bar carries the subject colour without tinting the text. -->
+                  <div class="h-1.5 w-full bg-gradient-to-r <?= $accent['bar'] ?>" aria-hidden="true"></div>
+
+                  <div class="p-5">
+                    <div class="flex items-start justify-between gap-2">
+                      <h3 class="min-w-0 text-base font-bold leading-snug">
+                        <!--
+                          The whole card is clickable via the stretched link, but
+                          the link itself is what receives keyboard focus.
+                        -->
+                        <a href="/?subject=<?= urlencode($reg->name) ?>"
+                           class="after:absolute after:inset-0 after:content-[''] group-hover:text-brand-700">
+                          <?= htmlspecialchars($reg->name) ?>
+                        </a>
                       </h3>
+
+                      <!-- z-10 lifts the menu above the stretched link. -->
+                      <div class="relative z-10 -mr-2 -mt-2 flex-shrink-0">
+                        <button type="button"
+                                class="btn-icon btn-icon-compact"
+                                data-menu-trigger="<?= $menuId ?>"
+                                aria-haspopup="menu"
+                                aria-expanded="false"
+                                aria-label="Actions for <?= htmlspecialchars($reg->name) ?>">
+                          <i data-lucide="ellipsis-vertical" class="h-4 w-4" aria-hidden="true"></i>
+                        </button>
+                        <div id="<?= $menuId ?>" hidden role="menu" class="menu absolute right-0 top-full mt-1">
+                          <a role="menuitem" class="menu-item" href="/?subject=<?= urlencode($reg->name) ?>">
+                            <i data-lucide="folder-open" class="h-4 w-4" aria-hidden="true"></i> Open subject
+                          </a>
+                          <a role="menuitem" class="menu-item" target="_blank" rel="noopener"
+                             href="/export/register/<?= urlencode($reg->name) ?>/pdf">
+                            <i data-lucide="file-text" class="h-4 w-4" aria-hidden="true"></i> Export as PDF
+                          </a>
+                          <a role="menuitem" class="menu-item"
+                             href="/export/register/<?= urlencode($reg->name) ?>/markdown">
+                            <i data-lucide="file-down" class="h-4 w-4" aria-hidden="true"></i> Export as Markdown
+                          </a>
+                        </div>
+                      </div>
                     </div>
+
+                    <dl class="mt-4 flex items-center gap-4">
+                      <div>
+                        <dt class="sr-only">Notes</dt>
+                        <dd class="flex items-baseline gap-1.5">
+                          <span class="text-xl font-extrabold tabular-nums"><?= $count ?></span>
+                          <span class="text-2xs font-semibold uppercase tracking-wider text-content-subtle">
+                            note<?= $count === 1 ? '' : 's' ?>
+                          </span>
+                        </dd>
+                      </div>
+                    </dl>
                   </div>
+                </article>
+              <?php endforeach; ?>
 
-                  <!-- Pages Layer Effect at bottom -->
-                  <div class="absolute bottom-0 left-4 right-0 h-3 bg-white rounded-br-2xl border-t border-stone-200 pointer-events-none"></div>
-                  <div class="absolute bottom-1 left-4 right-1 h-3 bg-stone-100 rounded-br-2xl border-t border-stone-200 pointer-events-none"></div>
-
-                  <!-- Stats Badge -->
-                  <div class="absolute bottom-6 left-6 pointer-events-none">
-                    <span class="bg-black/10 text-black/60 px-2 py-1 rounded text-xs font-bold">
-                      <?= count($reg->noteIds) ?> Notes
-                    </span>
-                  </div>
-
-                  <!-- Export Menu Dropdown -->
-                  <div class="absolute top-4 right-4 z-10 hidden md:block">
-                    <button
-                      type="button"
-                      onclick="event.stopPropagation(); toggleExportMenu('<?= md5($reg->name) ?>');"
-                      class="p-1.5 bg-white/50 hover:bg-white rounded-full text-stone-600 hover:text-orange-600 transition-all opacity-0 group-hover:opacity-100 shadow-sm"
-                      title="Export Notebook"
-                    >
-                      <i data-lucide="download" class="w-4 h-4"></i>
-                    </button>
-
-                    <div id="export-menu-<?= md5($reg->name) ?>" class="hidden absolute right-0 top-8 w-40 bg-white rounded-xl shadow-xl border border-stone-100 py-1 overflow-hidden z-20">
-                      <a
-                        href="/export/register/<?= urlencode($reg->name) ?>/pdf"
-                        target="_blank"
-                        class="w-full flex items-center gap-2 px-3 py-2 text-xs font-bold text-stone-600 hover:bg-orange-50 hover:text-orange-600 text-left"
-                      >
-                        <i data-lucide="file-text" class="w-3.5 h-3.5"></i> PDF
-                      </a>
-                      <a
-                        href="/export/register/<?= urlencode($reg->name) ?>/markdown"
-                        class="w-full flex items-center gap-2 px-3 py-2 text-xs font-bold text-stone-600 hover:bg-orange-50 hover:text-orange-600 text-left"
-                      >
-                        <i data-lucide="file" class="w-3.5 h-3.5"></i> Markdown
-                      </a>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            <?php endforeach; ?>
-
-            <!-- New Subject Card Placeholder -->
-            <div
-              onclick="document.getElementById('new-register-form').classList.remove('hidden'); document.getElementById('new-reg-name').focus();"
-              class="h-56 md:h-64 rounded-2xl border-4 border-dashed border-stone-200 flex flex-col items-center justify-center cursor-pointer hover:border-orange-300 hover:bg-orange-50/50 transition-all group"
-            >
-              <div class="bg-white p-4 rounded-full shadow-sm mb-3 group-hover:scale-110 transition-transform">
-                <i data-lucide="book" class="w-6 h-6 text-stone-400 group-hover:text-orange-500"></i>
-              </div>
-              <span class="font-hand text-xl text-stone-400 group-hover:text-orange-600">New Subject</span>
+              <!-- Add subject -->
+              <button type="button"
+                      onclick="focusNewSubject()"
+                      class="flex min-h-[9rem] cursor-pointer flex-col items-center justify-center gap-2 rounded-card border-2 border-dashed border-line-strong bg-surface/50 p-5 text-content-muted transition-colors duration-200 hover:border-brand-400 hover:bg-brand-50 hover:text-brand-700">
+                <i data-lucide="plus" class="h-5 w-5" aria-hidden="true"></i>
+                <span class="text-sm font-semibold">Add a subject</span>
+              </button>
             </div>
-          </div>
+          </section>
         <?php endif; ?>
-      </section>
-    <?php endif; ?>
 
-    <!-- Loose Papers (Recent Notes) -->
-    <section>
-      <div class="flex items-center justify-between mb-6">
-        <h2 class="text-lg font-bold text-stone-400 uppercase tracking-widest text-xs flex items-center gap-2">
-          <i data-lucide="clock" class="w-4 h-4"></i>
-          <?= $activeSub ? "Subject Notes" : "Recent Papers" ?>
-        </h2>
-        <?php if ($activeSub): ?>
-          <div class="flex items-center gap-2">
-            <a href="/notepad?subject=<?= urlencode($activeSub) ?>" class="px-3 py-1 bg-white border border-stone-200 rounded-lg text-xs font-bold text-stone-600 hover:text-orange-600 flex items-center gap-1.5 shadow-sm">
-              <i data-lucide="pen-tool" class="w-3.5 h-3.5"></i> New Note
-            </a>
-            <a href="/export/register/<?= urlencode($activeSub) ?>/pdf" target="_blank" class="px-3 py-1 bg-white border border-stone-200 rounded-lg text-xs font-bold text-stone-600 hover:text-orange-600 flex items-center gap-1.5 shadow-sm">
-              <i data-lucide="download" class="w-3.5 h-3.5"></i> Export
-            </a>
-          </div>
-        <?php endif; ?>
-      </div>
+        <!-- ============ Notes ============ -->
+        <section aria-labelledby="notes-title">
+          <h2 id="notes-title" class="section-label mb-4">
+            <i data-lucide="clock" class="h-3.5 w-3.5" aria-hidden="true"></i>
+            <?= $query ? 'Search results' : ($activeSub ? 'Notes in this subject' : 'Recent notes') ?>
+          </h2>
 
-      <?php if (empty($notes)): ?>
-        <div class="p-12 text-center bg-white/40 border-2 border-dashed border-stone-200 rounded-2xl">
-          <p class="text-stone-400 font-hand text-xl mb-2">No notes found here.</p>
-          <a href="/notepad<?= $activeSub ? '?subject=' . urlencode($activeSub) : '' ?>" class="text-orange-600 font-bold hover:underline">
-            Write your first note &rarr;
-          </a>
-        </div>
-      <?php else: ?>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <?php foreach ($notes as $idx => $note): ?>
-            <div
-              onclick="window.location.href='<?= $note->type === 'pdf' ? '/pdf/' . $note->id : ($note->type === 'text' ? '/notepad?id=' . $note->id : '/note/' . $note->id) ?>'"
-              oncontextmenu="openContextMenu(event, 'note', '<?= $note->id ?>', '<?= htmlspecialchars(addslashes($note->title)) ?>')"
-              class="relative group cursor-pointer"
-              style="transform: rotate(<?= $idx % 2 === 0 ? '0.7deg' : '-0.7deg' ?>)"
-            >
-              <!-- Paper Stack Shadow Effect -->
-              <div class="absolute inset-0 bg-stone-200 rounded-sm transform translate-x-1 translate-y-2"></div>
+          <?php if (empty($noteList)): ?>
+            <!-- Empty state: says what happened and offers the next step. -->
+            <div class="card flex flex-col items-center px-6 py-12 text-center">
+              <span class="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-brand-50 text-brand-600">
+                <i data-lucide="<?= $query ? 'search-x' : 'notebook-pen' ?>" class="h-6 w-6" aria-hidden="true"></i>
+              </span>
+              <h3 class="text-base font-bold">
+                <?= $query ? 'No notes match that search' : 'No notes yet' ?>
+              </h3>
+              <p class="mx-auto mt-1.5 max-w-sm text-sm text-content-muted">
+                <?= $query
+                  ? 'Try a different keyword, or use AI search to look by meaning instead of exact words.'
+                  : 'Record a lecture and let AI structure it for you, or start writing on a blank page.' ?>
+              </p>
+              <div class="mt-5 flex flex-wrap justify-center gap-2">
+                <?php if ($query): ?>
+                  <a href="/" class="btn-secondary">Clear search</a>
+                <?php endif; ?>
+                <a href="/recorder<?= $activeSub ? '?subject=' . urlencode($activeSub) : '' ?>" class="btn-primary">
+                  <i data-lucide="mic" class="h-4 w-4" aria-hidden="true"></i>
+                  Record a lecture
+                </a>
+                <a href="/notepad<?= $activeSub ? '?subject=' . urlencode($activeSub) : '' ?>" class="btn-secondary">
+                  <i data-lucide="pen-line" class="h-4 w-4" aria-hidden="true"></i>
+                  Write a note
+                </a>
+              </div>
+            </div>
+          <?php else: ?>
+            <ul class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <?php foreach ($noteList as $i => $note):
+                $meta = note_type_meta($note->type);
+                $menuId = 'note-menu-' . $note->id;
+              ?>
+                <li class="animate-rise-in" style="animation-delay: <?= min($i * 45, 300) ?>ms">
+                  <article class="card-interactive group relative flex h-full flex-col p-5">
+                    <div class="flex items-start justify-between gap-3">
+                      <span class="<?= $meta['badge'] ?>">
+                        <i data-lucide="<?= $meta['icon'] ?>" class="h-3 w-3" aria-hidden="true"></i>
+                        <?= $meta['label'] ?>
+                      </span>
 
-              <!-- Lined Paper Sheet -->
-              <div class="relative bg-paper p-6 rounded-sm shadow-sm border border-stone-200 h-52 flex flex-col transition-transform group-hover:-translate-y-1">
-                
-                <!-- 3 Hole Punches -->
-                <div class="absolute top-0 bottom-0 left-4 flex flex-col justify-evenly">
-                  <div class="w-3 h-3 bg-desk rounded-full shadow-inner"></div>
-                  <div class="w-3 h-3 bg-desk rounded-full shadow-inner"></div>
-                  <div class="w-3 h-3 bg-desk rounded-full shadow-inner"></div>
-                </div>
+                      <div class="relative z-10 -mr-2 -mt-2 flex-shrink-0">
+                        <button type="button"
+                                class="btn-icon btn-icon-compact"
+                                data-menu-trigger="<?= $menuId ?>"
+                                aria-haspopup="menu"
+                                aria-expanded="false"
+                                aria-label="Actions for <?= htmlspecialchars($note->title) ?>">
+                          <i data-lucide="ellipsis-vertical" class="h-4 w-4" aria-hidden="true"></i>
+                        </button>
+                        <div id="<?= $menuId ?>" hidden role="menu" class="menu absolute right-0 top-full mt-1">
+                          <button role="menuitem" type="button" class="menu-item"
+                                  onclick="openReminderDialog(this, 'note', '<?= $note->id ?>', <?= htmlspecialchars(json_encode($note->title), ENT_QUOTES) ?>)">
+                            <i data-lucide="bell-plus" class="h-4 w-4" aria-hidden="true"></i> Set a reminder
+                          </button>
+                          <a role="menuitem" class="menu-item" target="_blank" rel="noopener"
+                             href="/export/note/<?= $note->id ?>/pdf">
+                            <i data-lucide="file-text" class="h-4 w-4" aria-hidden="true"></i> Export as PDF
+                          </a>
+                          <a role="menuitem" class="menu-item" href="/export/note/<?= $note->id ?>/markdown">
+                            <i data-lucide="file-down" class="h-4 w-4" aria-hidden="true"></i> Export as Markdown
+                          </a>
+                          <button role="menuitem" type="button" class="menu-item-danger"
+                                  onclick="NoteNest.deleteNote('<?= $note->id ?>', <?= htmlspecialchars(json_encode($note->title), ENT_QUOTES) ?>)">
+                            <i data-lucide="trash-2" class="h-4 w-4" aria-hidden="true"></i> Delete note
+                          </button>
+                        </div>
+                      </div>
+                    </div>
 
-                <div class="pl-8 h-full flex flex-col">
-                  <div class="flex justify-between items-start mb-2">
-                    <span class="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded <?= $note->type === 'audio' ? 'bg-blue-100 text-blue-700' : ($note->type === 'pdf' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700') ?>">
-                      <?= $note->type ?>
-                    </span>
-                    <span class="font-hand text-stone-400 text-sm"><?= htmlspecialchars($note->date) ?></span>
-                  </div>
+                    <h3 class="mt-3 text-base font-bold leading-snug">
+                      <a href="<?= note_href($note) ?>"
+                         class="after:absolute after:inset-0 after:content-[''] group-hover:text-brand-700">
+                        <?= htmlspecialchars($note->title) ?>
+                      </a>
+                    </h3>
 
-                  <h3 class="font-hand font-bold text-2xl text-stone-800 mb-2 leading-tight group-hover:text-orange-700 transition-colors line-clamp-2">
-                    <?= htmlspecialchars($note->title) ?>
-                  </h3>
-
-                  <div class="relative flex-1 overflow-hidden">
-                    <p class="text-sm text-stone-500 font-sans leading-relaxed line-clamp-3">
+                    <p class="mt-2 line-clamp-3 flex-1 text-sm leading-relaxed text-content-muted">
                       <?= htmlspecialchars($note->summary) ?>
                     </p>
-                    <div class="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-paper to-transparent"></div>
-                  </div>
 
-                  <div class="mt-2 pt-2 border-t border-stone-100 flex justify-between items-center">
-                    <span class="text-xs text-stone-400 font-bold uppercase tracking-wide"><?= htmlspecialchars($note->subject) ?></span>
-                    <i data-lucide="arrow-right" class="w-4 h-4 text-stone-300 group-hover:text-orange-500 transition-colors"></i>
-                  </div>
-                </div>
-              </div>
-            </div>
-          <?php endforeach; ?>
-        </div>
-      <?php endif; ?>
-    </section>
-  </div>
-
-  <!-- Sticky Note Reminders (Desktop Fixed) -->
-  <aside class="hidden md:flex absolute right-8 top-8 bottom-8 w-72 flex-col pointer-events-none">
-    <div class="bg-yellow-200 shadow-xl transform -rotate-1 p-6 rounded-sm pointer-events-auto flex flex-col max-h-full border border-yellow-300 relative">
-      <!-- Tape visual -->
-      <div class="absolute -top-4 left-1/2 -translate-x-1/2 w-16 h-8 bg-white/40 rotate-1 shadow-sm backdrop-blur-sm border-l border-r border-white/50"></div>
-      
-      <div class="flex items-center justify-between border-b-2 border-stone-800/10 pb-2 mb-4">
-        <h3 class="font-hand font-bold text-2xl text-stone-800 flex items-center gap-2">
-          <i data-lucide="bell" class="w-5 h-5"></i> Reminders
-        </h3>
-        <button onclick="openCreateReminderModal()" class="p-1 hover:bg-yellow-300 rounded text-stone-700" title="Add reminder">
-          <i data-lucide="plus" class="w-4 h-4"></i>
-        </button>
+                    <footer class="mt-4 flex items-center justify-between gap-2 border-t border-line pt-3">
+                      <span class="truncate text-2xs font-bold uppercase tracking-wider text-content-subtle">
+                        <?= htmlspecialchars($note->subject) ?>
+                      </span>
+                      <time class="flex-shrink-0 text-2xs font-semibold normal-case tracking-normal text-content-subtle">
+                        <?= htmlspecialchars($note->date) ?>
+                      </time>
+                    </footer>
+                  </article>
+                </li>
+              <?php endforeach; ?>
+            </ul>
+          <?php endif; ?>
+        </section>
       </div>
 
-      <!-- Reminder Items -->
-      <div class="flex-1 overflow-y-auto pr-1 space-y-3">
-        <?php if (empty($reminders)): ?>
-          <p class="font-hand text-stone-500 text-lg text-center mt-10">Nothing to do yet!</p>
-        <?php else: ?>
-          <?php foreach ($reminders as $rem): ?>
-            <div class="group flex items-start gap-2 p-2 rounded hover:bg-yellow-300/50 transition-colors cursor-pointer <?= $rem->completed ? 'opacity-50' : '' ?>">
-              <button
-                type="button"
-                onclick="NoteNest.toggleReminder('<?= $rem->id ?>')"
-                class="mt-1 w-4 h-4 rounded border border-stone-500 flex items-center justify-center <?= $rem->completed ? 'bg-stone-600 border-stone-600' : 'bg-white' ?>"
-              >
-                <?php if ($rem->completed): ?>
-                  <i data-lucide="check" class="w-3 h-3 text-white"></i>
-                <?php endif; ?>
+      <!-- ============ Reminders (desktop rail) ============ -->
+      <aside class="hidden xl:block" aria-labelledby="reminders-title">
+        <div class="sticky top-0">
+          <div class="card overflow-hidden">
+            <div class="flex items-center justify-between gap-2 border-b border-line px-4 py-3">
+              <h2 id="reminders-title" class="section-label">
+                <i data-lucide="bell" class="h-3.5 w-3.5" aria-hidden="true"></i>
+                Reminders
+              </h2>
+              <button type="button"
+                      class="btn-icon btn-icon-compact"
+                      aria-label="Add a reminder"
+                      onclick="openReminderDialog(this)">
+                <i data-lucide="plus" class="h-4 w-4" aria-hidden="true"></i>
               </button>
+            </div>
 
-              <div class="flex-1">
-                <p class="font-hand text-lg leading-tight text-stone-800 <?= $rem->completed ? 'line-through' : '' ?>">
-                  <?= htmlspecialchars($rem->text) ?>
+            <?php if (empty($reminderList)): ?>
+              <div class="px-4 py-8 text-center">
+                <p class="text-sm font-semibold">Nothing due</p>
+                <p class="mt-1 text-2xs font-medium normal-case tracking-normal text-content-subtle">
+                  Add a reminder to keep track of readings and deadlines.
                 </p>
-                <div class="flex items-center gap-2 mt-1">
-                  <span class="text-[10px] uppercase font-bold text-stone-500 bg-white/50 px-1 rounded">
-                    <?= htmlspecialchars($rem->targetName ?: 'General') ?>
-                  </span>
-                  <span class="text-xs font-hand text-stone-500">
-                    <?= htmlspecialchars($rem->dueDate) ?>
-                  </span>
-                </div>
               </div>
-
-              <button
-                type="button"
-                onclick="NoteNest.deleteReminder('<?= $rem->id ?>')"
-                class="text-stone-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
-              >
-                <i data-lucide="trash-2" class="w-4 h-4"></i>
-              </button>
-            </div>
-          <?php endforeach; ?>
-        <?php endif; ?>
-      </div>
-    </div>
-  </aside>
-
-  <!-- Mobile Reminders Drawer -->
-  <div id="mobile-reminders" class="hidden fixed inset-0 z-50 md:hidden flex justify-end">
-    <div class="absolute inset-0 bg-black/30 backdrop-blur-sm" onclick="document.getElementById('mobile-reminders').classList.add('hidden')"></div>
-    <div class="w-80 bg-yellow-100 h-full shadow-2xl relative flex flex-col animate-slide-left border-l-4 border-yellow-300 z-10 p-6 pt-10">
-      <button onclick="document.getElementById('mobile-reminders').classList.add('hidden')" class="absolute top-4 right-4 p-2 text-stone-500">
-        <i data-lucide="x" class="w-5 h-5"></i>
-      </button>
-      <h3 class="font-hand font-bold text-3xl text-stone-800 mb-6 flex items-center gap-2">
-        <i data-lucide="bell" class="w-6 h-6"></i> Reminders
-      </h3>
-      <div class="flex-1 overflow-y-auto space-y-3">
-        <?php foreach ($reminders ?? [] as $rem): ?>
-          <div class="flex items-start gap-2 p-2 rounded bg-yellow-200/50">
-            <button onclick="NoteNest.toggleReminder('<?= $rem->id ?>')" class="mt-1 w-4 h-4 rounded border border-stone-500 bg-white">
-              <?php if ($rem->completed): ?><i data-lucide="check" class="w-3 h-3 text-stone-800"></i><?php endif; ?>
-            </button>
-            <div class="flex-1">
-              <p class="font-hand text-lg text-stone-800 <?= $rem->completed ? 'line-through' : '' ?>"><?= htmlspecialchars($rem->text) ?></p>
-            </div>
+            <?php else: ?>
+              <ul class="scrollbar-slim max-h-[28rem] divide-y divide-line overflow-y-auto">
+                <?php foreach ($reminderList as $rem): ?>
+                  <li class="group flex items-start gap-3 px-4 py-3 transition-colors hover:bg-surface-sunken">
+                    <!-- A real checkbox: keyboard operable and announced correctly. -->
+                    <input type="checkbox"
+                           id="rem-<?= $rem->id ?>"
+                           class="mt-0.5 h-4 w-4 flex-shrink-0 cursor-pointer rounded border-line-strong text-brand-600 focus:ring-2 focus:ring-brand-500 focus:ring-offset-2"
+                           <?= $rem->completed ? 'checked' : '' ?>
+                           onchange="NoteNest.toggleReminder('<?= $rem->id ?>', this)">
+                    <div class="min-w-0 flex-1">
+                      <label for="rem-<?= $rem->id ?>"
+                             class="block cursor-pointer text-sm font-medium leading-snug <?= $rem->completed ? 'text-content-subtle line-through' : 'text-content' ?>">
+                        <?= htmlspecialchars($rem->text) ?>
+                      </label>
+                      <p class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-2xs font-semibold normal-case tracking-normal text-content-subtle">
+                        <span class="badge-neutral"><?= htmlspecialchars($rem->targetName ?: 'General') ?></span>
+                        <span><?= htmlspecialchars($rem->dueDate) ?></span>
+                      </p>
+                    </div>
+                    <button type="button"
+                            class="btn-icon btn-icon-compact flex-shrink-0 opacity-0 transition-opacity hover:text-danger focus-visible:opacity-100 group-hover:opacity-100"
+                            aria-label="Delete reminder: <?= htmlspecialchars($rem->text) ?>"
+                            onclick="NoteNest.deleteReminder('<?= $rem->id ?>', <?= htmlspecialchars(json_encode($rem->text), ENT_QUOTES) ?>)">
+                      <i data-lucide="trash-2" class="h-4 w-4" aria-hidden="true"></i>
+                    </button>
+                  </li>
+                <?php endforeach; ?>
+              </ul>
+            <?php endif; ?>
           </div>
-        <?php endforeach; ?>
-      </div>
-    </div>
-  </div>
-
-  <!-- Context Menu Popup -->
-  <div id="context-menu" class="hidden fixed bg-white rounded-xl shadow-2xl border border-stone-200 py-2 z-50 animate-fade-in w-56">
-    <div class="px-4 py-2 border-b border-stone-100 mb-1 flex justify-between items-center">
-      <span id="context-type-label" class="text-xs font-bold text-stone-400 uppercase tracking-wider">Note</span>
-      <button onclick="closeContextMenu()"><i data-lucide="x" class="w-3 h-3 text-stone-400"></i></button>
-    </div>
-    <button onclick="openCreateReminderFromContext()" class="w-full text-left px-4 py-2 text-sm text-stone-700 hover:bg-orange-50 hover:text-orange-600 flex items-center gap-2">
-      <i data-lucide="bell" class="w-4 h-4"></i> Remind me
-    </button>
-    <button id="context-delete-btn" onclick="deleteFromContext()" class="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2">
-      <i data-lucide="trash-2" class="w-4 h-4"></i> Delete
-    </button>
-  </div>
-
-  <!-- Create Reminder Modal -->
-  <div id="reminder-modal" class="hidden fixed inset-0 bg-black/20 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
-    <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md animate-slide-up border border-stone-200">
-      <h3 class="font-hand font-bold text-2xl text-stone-800 mb-6 flex items-center gap-2">
-        <i data-lucide="clock" class="text-orange-500"></i> Set Reminder
-      </h3>
-      <div class="space-y-4">
-        <div>
-          <label class="block text-xs font-bold uppercase text-stone-400 mb-1">Reminder</label>
-          <input
-            type="text"
-            id="modal-reminder-text"
-            placeholder="What do you need to remember?"
-            class="w-full border-b-2 border-stone-200 focus:border-orange-400 outline-none py-2 font-hand text-xl bg-transparent"
-          />
         </div>
-        <div>
-          <label class="block text-xs font-bold uppercase text-stone-400 mb-1">Due Date</label>
-          <input
-            type="datetime-local"
-            id="modal-reminder-date"
-            class="w-full p-3 rounded-xl bg-stone-50 border border-stone-200 text-sm font-sans"
-          />
-        </div>
-      </div>
-      <div class="flex gap-3 mt-8">
-        <button onclick="document.getElementById('reminder-modal').classList.add('hidden')" class="flex-1 py-3 text-stone-500 hover:bg-stone-50 rounded-xl font-bold">
-          Cancel
-        </button>
-        <button onclick="saveModalReminder()" class="flex-1 py-3 bg-stone-800 text-white hover:bg-stone-900 rounded-xl font-bold shadow-lg shadow-stone-200">
-          Save
-        </button>
-      </div>
+      </aside>
     </div>
   </div>
 </div>
 
 <script>
-  let currentContext = { type: 'general', targetId: null, targetName: '' };
-
-  function toggleExportMenu(id) {
-    const el = document.getElementById('export-menu-' + id);
-    if (el) el.classList.toggle('hidden');
-  }
-
-  function openContextMenu(e, type, targetId, targetName) {
-    e.preventDefault();
-    e.stopPropagation();
-    currentContext = { type, targetId, targetName };
-
-    const menu = document.getElementById('context-menu');
-    document.getElementById('context-type-label').textContent = type;
-    menu.style.left = Math.min(e.clientX, window.innerWidth - 240) + 'px';
-    menu.style.top = Math.min(e.clientY, window.innerHeight - 150) + 'px';
-    menu.classList.remove('hidden');
-  }
-
-  function closeContextMenu() {
-    document.getElementById('context-menu').classList.add('hidden');
-  }
-
-  document.addEventListener('click', () => closeContextMenu());
-
-  function openCreateReminderModal() {
-    currentContext = { type: 'general', targetId: null, targetName: '' };
-    document.getElementById('modal-reminder-text').value = '';
-    document.getElementById('reminder-modal').classList.remove('hidden');
-  }
-
-  function openCreateReminderFromContext() {
-    closeContextMenu();
-    document.getElementById('modal-reminder-text').value = 'Review: ' + currentContext.targetName;
-    document.getElementById('reminder-modal').classList.remove('hidden');
-  }
-
-  async function saveModalReminder() {
-    const text = document.getElementById('modal-reminder-text').value.trim();
-    const date = document.getElementById('modal-reminder-date').value;
-    if (!text) return;
-
-    await NoteNest.saveReminder({
-      text,
-      dueDate: date ? new Date(date).toLocaleString() : 'Tomorrow',
-      type: currentContext.type,
-      targetId: currentContext.targetId,
-      targetName: currentContext.targetName
-    });
-    document.getElementById('reminder-modal').classList.add('hidden');
-  }
-
-  function deleteFromContext() {
-    closeContextMenu();
-    if (currentContext.type === 'note' && currentContext.targetId) {
-      NoteNest.deleteNote(currentContext.targetId);
+  function focusNewSubject() {
+    const trigger = document.querySelector('[aria-controls="new-register-form"]');
+    if (trigger) {
+      if (document.getElementById('new-register-form').hidden) trigger.click();
+      else document.getElementById('new-reg-name').focus();
     }
   }
 </script>

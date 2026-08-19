@@ -28,7 +28,9 @@ It combines:
 - **Architecture**: MVC / Service-Repository Pattern with Front Controller (`public/index.php`)
 - **Database**: SQLite with PDO (Zero configuration, automatic schema migration and seed data)
 - **AI Backend**: DeepSeek API (`deepseek-chat`, `deepseek-reasoner`) / OpenAI API via native cURL with JSON mode and fallback repair
-- **Frontend**: Custom Tailwind CSS, Lucide Icons, Patrick Hand & Nunito Typography, Web Speech API, and Vanilla JS / Alpine-ready interactivity
+- **Frontend**: Compiled + purged Tailwind CSS (design-token based), self-hosted Lucide icons, Plus Jakarta Sans (UI) & Lora (reading), Web Speech API, vanilla JS
+- **Design system**: Soft UI Evolution — semantic colour tokens, 4/8px spacing rhythm, WCAG 2.1 AA verified (see `design-system/notenest-ai/MASTER.md`)
+- **Build**: Tailwind CLI via npm (`npm run build`). Output is committed, so deployment needs PHP only
 
 ---
 
@@ -39,14 +41,23 @@ notenest-php/
 ├── composer.json               # PHP PSR-4 configuration
 ├── .env.example                # Configuration template
 ├── .env                        # Environment variables
+├── package.json                # Front-end build scripts (Tailwind CLI)
+├── tailwind.config.js          # Design tokens -> Tailwind theme
+├── resources/
+│   ├── css/input.css           # Design tokens, component classes, motion
+│   └── build/copy-vendor.mjs   # Vendors pinned browser bundles from node_modules
+├── design-system/
+│   └── notenest-ai/MASTER.md   # Source of truth for style, colour, typography
 ├── public/
 │   ├── index.php               # Front controller & routing
 │   └── assets/
-│       ├── css/app.css         # Paper theme, animations, 3D card flips
+│       ├── css/app.css         # COMPILED output - edit resources/css/input.css instead
+│       ├── img/favicon.svg
+│       ├── vendor/             # Self-hosted Lucide bundle (pinned, no CDN)
 │       └── js/
-│           ├── app.js          # Core client helper, search, modals, TTS
+│           ├── app.js          # Dialogs, menus, toasts, confirm, fetch wrapper
 │           ├── speech.js       # Web Speech API speech-to-text engine
-│           └── study.js        # 3D Flashcards & interactive quiz engine
+│           └── study.js        # Flashcards & accessible quiz engine
 ├── src/
 │   ├── Config/
 │   │   └── Database.php        # SQLite PDO connection & auto-migration
@@ -68,7 +79,7 @@ notenest-php/
 │       └── Router.php          # Lightweight HTTP router with JSON support
 ├── views/
 │   ├── layouts/
-│   │   └── main.php            # Master layout (Header, Sidebar, Toast notifications)
+│   │   └── main.php            # App shell (skip link, app bar, live regions)
 │   ├── pages/
 │   │   ├── dashboard.php       # Study desk, notebook stacks, loose papers
 │   │   ├── note_view.php       # Note viewer, Study Buddy AI sidebar, TTS
@@ -77,7 +88,9 @@ notenest-php/
 │   │   ├── recorder.php        # Speech recording & live AI transcription
 │   │   └── study_mode.php      # 3D Flashcards & Quiz center
 │   └── partials/
-│       └── sidebar.php         # Notebook shelf & search bar
+│       ├── sidebar.php         # Desktop rail, mobile drawer, bottom tabs
+│       ├── reminders.php       # Reminders drawer + create dialog (app-wide)
+│       └── helpers.php         # Subject accents, note-type metadata, routing
 └── storage/
     └── database.sqlite         # SQLite database file
 ```
@@ -115,6 +128,15 @@ Start PHP's built-in web server:
 ```bash
 php -S localhost:8000 -t public
 ```
+
+### 5. (Optional) Rebuild front-end assets
+Only needed if you change styles or Tailwind classes — the compiled output is committed.
+```bash
+npm install && npm run build
+```
+Use `npm run dev` to rebuild the stylesheet on save while working on the UI.
+
+Full setup and verification steps live in [run.md](run.md).
 
 Open your browser and navigate to:
 ```

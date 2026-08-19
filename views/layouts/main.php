@@ -1,89 +1,109 @@
+<?php
+/**
+ * Master layout - application shell.
+ *
+ * Structure: skip link -> mobile app bar -> sidebar nav -> <main> -> bottom nav.
+ * Only <main> scrolls, so the chrome stays put while content moves.
+ */
+$pendingReminders = count(array_filter($reminders ?? [], fn($r) => !$r->completed));
+$currentView = $currentView ?? '';
+?>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="h-full">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title><?= htmlspecialchars($pageTitle ?? 'NoteNest AI') ?> - NoteNest</title>
-  
-  <!-- Tailwind CSS CDN -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          colors: {
-            paper: '#fdfbf7',
-            'paper-line': '#e2e8f0',
-            'paper-margin': '#fca5a5',
-            ink: '#334155',
-            desk: '#f5f5f4',
-            wood: '#e7e5e4',
-            highlight: '#fef3c7',
-          },
-          fontFamily: {
-            sans: ['Nunito', 'sans-serif'],
-            hand: ['Patrick Hand', 'cursive'],
-          },
-          boxShadow: {
-            'notebook': '2px 4px 12px -2px rgba(0, 0, 0, 0.1)',
-            'floating': '0 8px 30px rgba(0,0,0,0.08)',
-          }
-        }
-      }
-    }
-  </script>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#7C3AED">
+  <meta name="description" content="NoteNest AI - record lectures, organise notes by subject, and study with AI-generated flashcards and quizzes.">
+  <title><?= htmlspecialchars($pageTitle ?? 'Notes') ?> &middot; NoteNest AI</title>
 
-  <!-- Lucide Icons -->
-  <script src="https://unpkg.com/lucide@latest"></script>
+  <link rel="icon" href="/assets/img/favicon.svg" type="image/svg+xml">
 
-  <!-- Google Fonts -->
-  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800&family=Patrick+Hand&display=swap" rel="stylesheet">
+  <!-- Fonts: preconnect shaves a round trip off first paint; swap avoids invisible text. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Lora:ital,wght@0,400;0,500;0,600;1,400&display=swap">
 
-  <!-- Custom CSS -->
-  <link rel="stylesheet" href="/assets/css/app.css">
+  <!-- Compiled + purged Tailwind. Built by `npm run build:css`. -->
+  <link rel="stylesheet" href="/assets/css/app.css?v=<?= @filemtime(dirname(__DIR__, 2) . '/public/assets/css/app.css') ?: '1' ?>">
+
+  <!--
+    Icons are deferred (365 KB, nothing depends on them during parse).
+
+    app.js is deliberately NOT deferred and NOT at the end of <body>. Views
+    contain inline <script> blocks that call window.NoteNest, and those run
+    while the document is still parsing - i.e. before any deferred script has
+    executed. Loading it here is what makes NoteNest.* safe to reference from
+    any inline script on any page. It costs ~5.8 KB gzipped of blocking
+    request against a guarantee that the API is always there; the file only
+    defines objects and attaches document-level listeners, so it is safe to
+    run before <body> exists.
+  -->
+  <script src="/assets/vendor/lucide.min.js" defer></script>
+  <script src="/assets/js/app.js"></script>
 </head>
-<body class="bg-stone-100 text-stone-800 h-screen overflow-hidden flex flex-col md:flex-row">
+<body class="h-dvh overflow-hidden bg-surface-sunken text-content flex flex-col md:flex-row">
 
-  <!-- Toast / Background Notification Container -->
-  <div id="toast-container" class="fixed top-4 right-4 z-[100] flex flex-col gap-3 pointer-events-none">
-    <!-- Toasts append here dynamically with pointer-events-auto -->
+  <a href="#main-content" class="skip-link">Skip to main content</a>
+
+  <!--
+    Toast region. aria-live="polite" means screen readers announce toasts
+    without interrupting whatever the user is doing.
+  -->
+  <div id="toast-container"
+       role="status"
+       aria-live="polite"
+       aria-atomic="false"
+       class="pointer-events-none fixed right-4 top-4 z-[100] flex w-[min(24rem,calc(100vw-2rem))] flex-col gap-2">
   </div>
 
-  <!-- Mobile Header -->
-  <div class="md:hidden h-16 bg-white border-b border-stone-200 flex items-center justify-between px-4 z-40 flex-shrink-0">
-    <button onclick="document.getElementById('mobile-drawer').classList.remove('hidden')" class="p-2 text-stone-600">
-      <i data-lucide="menu" class="w-6 h-6"></i>
+  <!-- ===== Mobile app bar ===== -->
+  <header class="flex h-16 flex-shrink-0 items-center justify-between gap-2 border-b border-line bg-surface px-2 md:hidden">
+    <button type="button"
+            class="btn-icon"
+            data-dialog-open="mobile-drawer"
+            aria-label="Open navigation menu">
+      <i data-lucide="menu" class="h-5 w-5" aria-hidden="true"></i>
     </button>
 
-    <div class="flex items-center gap-2">
-      <div class="bg-orange-100 p-1.5 rounded-lg border border-orange-200">
-        <i data-lucide="backpack" class="text-orange-600 w-4 h-4"></i>
-      </div>
-      <a href="/" class="font-hand font-bold text-xl text-stone-800">NoteNest</a>
-    </div>
+    <a href="/" class="flex min-h-[2.75rem] items-center gap-2 rounded-control px-2">
+      <span class="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-600 text-content-inverse">
+        <i data-lucide="notebook-pen" class="h-4 w-4" aria-hidden="true"></i>
+      </span>
+      <span class="text-base font-bold tracking-tight">NoteNest</span>
+    </a>
 
-    <button onclick="document.getElementById('mobile-reminders').classList.remove('hidden')" class="p-2 text-stone-600 relative">
-      <i data-lucide="bell" class="w-6 h-6"></i>
-      <?php 
-        $pendingCount = count(array_filter($reminders ?? [], fn($r) => !$r->completed));
-        if ($pendingCount > 0): 
-      ?>
-        <span class="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border border-white"></span>
+    <button type="button"
+            class="btn-icon relative"
+            data-dialog-open="mobile-reminders"
+            aria-label="<?= $pendingReminders > 0
+              ? 'Reminders, ' . $pendingReminders . ' pending'
+              : 'Reminders, none pending' ?>">
+      <i data-lucide="bell" class="h-5 w-5" aria-hidden="true"></i>
+      <?php if ($pendingReminders > 0): ?>
+        <!-- Count, not just a dot: colour alone must never carry the meaning. -->
+        <span class="absolute right-1 top-1 flex h-[1.125rem] min-w-[1.125rem] items-center justify-center rounded-full bg-danger px-1 text-[0.6875rem] font-bold leading-none text-content-inverse ring-2 ring-surface">
+          <?= $pendingReminders > 9 ? '9+' : $pendingReminders ?>
+        </span>
       <?php endif; ?>
     </button>
-  </div>
+  </header>
 
-  <!-- Navigation Sidebar (Desktop & Mobile) -->
   <?php require dirname(__DIR__) . '/partials/sidebar.php'; ?>
 
-  <!-- Main Work Desk -->
-  <main class="flex-1 overflow-hidden relative p-0 md:p-6 shadow-inner bg-stone-100">
-    <div class="h-full md:rounded-3xl bg-desk border-t md:border border-stone-200/50 shadow-sm overflow-hidden relative">
-      <?= $content ?>
-    </div>
+  <!-- ===== Main work area ===== -->
+  <!--
+    pb-20 on mobile reserves room for the fixed bottom nav so the last row of
+    content is never trapped underneath it.
+  -->
+  <main id="main-content"
+        tabindex="-1"
+        class="relative flex-1 overflow-hidden focus:outline-none">
+    <?= $content ?>
   </main>
 
-  <!-- Global Scripts -->
-  <script src="/assets/js/app.js"></script>
+  <?php require dirname(__DIR__) . '/partials/reminders.php'; ?>
 </body>
 </html>

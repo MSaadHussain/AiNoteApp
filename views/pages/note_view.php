@@ -1,273 +1,386 @@
 <?php
 /**
- * NoteView - Full Paper View with Study Buddy AI Assistant
+ * Note reader + Study Buddy AI panel.
+ *
+ * The reading column uses the serif face and a constrained measure; the app
+ * chrome stays in the UI sans face so the two never compete.
  */
+require_once dirname(__DIR__) . '/partials/helpers.php';
+
+$meta = note_type_meta($note->type);
 ?>
 
-<div class="flex h-full relative bg-desk">
-  
-  <!-- Top Bar -->
-  <div class="absolute top-0 left-0 right-0 h-16 bg-white/80 backdrop-blur-md border-b border-stone-200 z-10 flex items-center justify-between px-6 shadow-sm">
-    <div class="flex items-center gap-4">
-      <a href="/" class="p-2 hover:bg-stone-100 rounded-full text-stone-500 transition-colors">
-        <i data-lucide="arrow-left" class="w-5 h-5"></i>
+<div class="flex h-full flex-col">
+
+  <!-- ============ Top bar ============ -->
+  <header class="z-20 flex h-16 flex-shrink-0 items-center justify-between gap-3 border-b border-line bg-surface/90 px-3 backdrop-blur sm:px-4">
+    <div class="flex min-w-0 items-center gap-2">
+      <a href="/?subject=<?= urlencode($note->subject) ?>" class="btn-icon" aria-label="Back to <?= htmlspecialchars($note->subject) ?>">
+        <i data-lucide="arrow-left" class="h-5 w-5" aria-hidden="true"></i>
       </a>
-      <div>
-        <h2 class="font-hand font-bold text-xl text-stone-800 leading-none"><?= htmlspecialchars($note->title) ?></h2>
-        <span class="text-xs text-stone-400 font-bold uppercase tracking-wider"><?= htmlspecialchars($note->subject) ?> • <?= htmlspecialchars($note->date) ?></span>
+      <div class="min-w-0">
+        <h1 class="truncate text-sm font-bold leading-tight sm:text-base"><?= htmlspecialchars($note->title) ?></h1>
+        <p class="flex items-center gap-1.5 truncate text-2xs font-semibold normal-case tracking-normal text-content-subtle">
+          <span><?= htmlspecialchars($note->subject) ?></span>
+          <span aria-hidden="true">&middot;</span>
+          <span><?= htmlspecialchars($note->date) ?></span>
+        </p>
       </div>
     </div>
 
-    <div class="flex items-center gap-3">
-      <button
-        type="button"
-        onclick="toggleStudyBuddy()"
-        class="bg-yellow-300 hover:bg-yellow-400 text-stone-900 px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-hand font-bold transform -rotate-1 shadow-sm transition-transform hover:rotate-0"
-      >
-        <i data-lucide="brain-circuit" class="w-4 h-4"></i>
-        Study Buddy
+    <div class="flex flex-shrink-0 items-center gap-1.5">
+      <button type="button"
+              id="study-buddy-toggle"
+              class="btn-primary btn-sm sm:min-h-[2.75rem] sm:px-4 sm:text-sm sm:normal-case sm:tracking-normal"
+              aria-expanded="false"
+              aria-controls="study-buddy-panel"
+              onclick="toggleStudyBuddy(this)">
+        <i data-lucide="sparkles" class="h-4 w-4" aria-hidden="true"></i>
+        <span class="hidden sm:inline">Study Buddy</span>
+        <span class="sm:hidden">AI</span>
       </button>
 
-      <!-- Export Dropdown -->
       <div class="relative">
-        <button
-          onclick="document.getElementById('note-export-menu').classList.toggle('hidden')"
-          class="p-2 hover:bg-stone-100 rounded-full text-stone-400"
-        >
-          <i data-lucide="more-vertical" class="w-5 h-5"></i>
+        <button type="button"
+                class="btn-icon"
+                data-menu-trigger="note-actions-menu"
+                aria-haspopup="menu"
+                aria-expanded="false"
+                aria-label="More actions">
+          <i data-lucide="ellipsis-vertical" class="h-5 w-5" aria-hidden="true"></i>
         </button>
-
-        <div id="note-export-menu" class="hidden absolute right-0 top-12 w-48 bg-white rounded-xl shadow-xl border border-stone-100 z-20 py-2 animate-fade-in">
-          <p class="px-4 py-2 text-xs font-bold text-stone-400 uppercase tracking-wider border-b border-stone-100 mb-1">Actions</p>
-          <a
-            href="/export/note/<?= $note->id ?>/pdf"
-            target="_blank"
-            class="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-stone-600 hover:bg-orange-50 hover:text-orange-700"
-          >
-            <i data-lucide="file-text" class="w-4 h-4"></i> Export as PDF
+        <div id="note-actions-menu" hidden role="menu" class="menu absolute right-0 top-full mt-1.5">
+          <a role="menuitem" class="menu-item" href="/notepad?id=<?= $note->id ?>">
+            <i data-lucide="pen-line" class="h-4 w-4" aria-hidden="true"></i> Edit note
           </a>
-          <a
-            href="/export/note/<?= $note->id ?>/markdown"
-            class="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-stone-600 hover:bg-orange-50 hover:text-orange-700"
-          >
-            <i data-lucide="file" class="w-4 h-4"></i> Export as Markdown
+          <button role="menuitem" type="button" class="menu-item"
+                  onclick="openReminderDialog(this, 'note', '<?= $note->id ?>', <?= htmlspecialchars(json_encode($note->title), ENT_QUOTES) ?>)">
+            <i data-lucide="bell-plus" class="h-4 w-4" aria-hidden="true"></i> Set a reminder
+          </button>
+          <a role="menuitem" class="menu-item" href="/export/note/<?= $note->id ?>/pdf" target="_blank" rel="noopener">
+            <i data-lucide="file-text" class="h-4 w-4" aria-hidden="true"></i> Export as PDF
           </a>
-          <a
-            href="/notepad?id=<?= $note->id ?>"
-            class="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-stone-600 hover:bg-orange-50 hover:text-orange-700"
-          >
-            <i data-lucide="pen-tool" class="w-4 h-4"></i> Edit in Notepad
+          <a role="menuitem" class="menu-item" href="/export/note/<?= $note->id ?>/markdown">
+            <i data-lucide="file-down" class="h-4 w-4" aria-hidden="true"></i> Export as Markdown
           </a>
-          <div class="border-t border-stone-100 my-1"></div>
-          <button
-            onclick="NoteNest.deleteNote('<?= $note->id ?>')"
-            class="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50"
-          >
-            <i data-lucide="trash-2" class="w-4 h-4"></i> Delete Note
+          <button role="menuitem" type="button" class="menu-item-danger"
+                  onclick="NoteNest.deleteNote('<?= $note->id ?>', <?= htmlspecialchars(json_encode($note->title), ENT_QUOTES) ?>)">
+            <i data-lucide="trash-2" class="h-4 w-4" aria-hidden="true"></i> Delete note
           </button>
         </div>
       </div>
     </div>
-  </div>
+  </header>
 
-  <!-- Main Content Area (Lined Paper Sheet) -->
-  <div class="flex-1 overflow-y-auto pt-20 pb-20 px-4 md:px-0">
-    <div class="max-w-3xl mx-auto bg-paper shadow-2xl min-h-[90vh] relative lined-paper mb-10">
-      
-      <div class="pl-16 pr-8 pt-12 pb-8">
-        <h1 class="text-4xl font-hand font-bold text-ink mb-6"><?= htmlspecialchars($note->title) ?></h1>
+  <div class="flex min-h-0 flex-1">
 
-        <!-- Summary Box -->
-        <div class="relative mb-8 group">
-          <div class="absolute -inset-1 bg-yellow-100/50 rounded-lg transform -rotate-1 group-hover:rotate-0 transition-transform"></div>
-          <div class="relative border-l-4 border-yellow-400 pl-4 py-2">
-            <div class="flex justify-between items-start">
-              <h3 class="font-hand font-bold text-lg text-stone-500 uppercase tracking-widest mb-1">Summary</h3>
-              <button onclick="NoteNest.speak(document.getElementById('note-summary-text').textContent)" class="text-stone-300 hover:text-stone-600 p-1">
-                <i data-lucide="volume-2" class="w-4 h-4"></i>
-              </button>
-            </div>
-            <p id="note-summary-text" class="text-stone-700 leading-8 font-serif italic text-lg">
-              <?= nl2br(htmlspecialchars($note->summary)) ?>
-            </p>
-          </div>
+    <!-- ============ Reading column ============ -->
+    <div class="scrollbar-slim min-w-0 flex-1 overflow-y-auto">
+      <article class="mx-auto max-w-3xl px-4 pb-24 pt-8 sm:px-8 md:pb-12">
+
+        <div class="mb-6 flex flex-wrap items-center gap-2">
+          <span class="<?= $meta['badge'] ?>">
+            <i data-lucide="<?= $meta['icon'] ?>" class="h-3 w-3" aria-hidden="true"></i>
+            <?= $meta['label'] ?>
+          </span>
+          <span class="badge-neutral"><?= htmlspecialchars($note->subject) ?></span>
         </div>
 
-        <!-- Sections -->
+        <h2 class="text-3xl font-extrabold leading-tight tracking-tight sm:text-4xl">
+          <?= htmlspecialchars($note->title) ?>
+        </h2>
+
+        <!-- Summary callout -->
+        <?php if (!empty($note->summary)): ?>
+          <section class="mt-6 rounded-card border border-brand-200 bg-brand-50 p-5"
+                   aria-labelledby="summary-heading">
+            <div class="mb-2 flex items-center justify-between gap-2">
+              <h3 id="summary-heading" class="section-label text-brand-700">
+                <i data-lucide="sparkles" class="h-3.5 w-3.5" aria-hidden="true"></i>
+                Summary
+              </h3>
+              <button type="button"
+                      class="btn-icon btn-icon-compact text-brand-600 hover:bg-brand-100"
+                      aria-label="Read aloud"
+                      data-speaking="false"
+                      onclick="NoteNest.speak(document.getElementById('note-summary-text').textContent, this)">
+                <i data-lucide="volume-2" class="h-4 w-4" aria-hidden="true"></i>
+              </button>
+            </div>
+            <p id="note-summary-text" class="font-reading text-base leading-relaxed text-content">
+              <?= nl2br(htmlspecialchars($note->summary)) ?>
+            </p>
+          </section>
+        <?php endif; ?>
+
+        <!-- Body -->
         <?php if (!empty($note->sections)): ?>
-          <div class="space-y-8">
-            <?php foreach ($note->sections as $idx => $sec): ?>
-              <div class="group relative">
-                <!-- Hint Sparkle in Left Margin -->
-                <div class="absolute -left-12 top-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button
-                    onclick="askAboutSection('<?= htmlspecialchars(addslashes($sec['heading'] ?? 'Section')) ?>', '<?= htmlspecialchars(addslashes($sec['content'] ?? '')) ?>')"
-                    class="bg-stone-100 p-1.5 rounded-full text-stone-400 hover:text-orange-500 hover:bg-orange-50 shadow-sm border border-stone-200"
-                    title="Ask Study Buddy"
-                  >
-                    <i data-lucide="sparkles" class="w-4 h-4"></i>
+          <div class="mt-10 space-y-10">
+            <?php foreach ($note->sections as $idx => $sec):
+              $heading = $sec['heading'] ?? 'Section';
+              $body = $sec['content'] ?? '';
+            ?>
+              <section class="group" aria-labelledby="section-<?= $idx ?>">
+                <div class="mb-3 flex flex-wrap items-center gap-2">
+                  <h3 id="section-<?= $idx ?>" class="text-xl font-bold tracking-tight">
+                    <?= htmlspecialchars($heading) ?>
+                  </h3>
+                  <span class="badge-neutral"><?= htmlspecialchars($sec['type'] ?? 'theory') ?></span>
+                  <!--
+                    Visible on focus as well as hover, so keyboard users can
+                    reach it. Hover-only affordances are unusable without a mouse.
+                  -->
+                  <button type="button"
+                          class="btn-icon btn-icon-compact opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100"
+                          aria-label="Ask Study Buddy about <?= htmlspecialchars($heading) ?>"
+                          onclick="askAboutSection(<?= htmlspecialchars(json_encode($heading), ENT_QUOTES) ?>, <?= htmlspecialchars(json_encode($body), ENT_QUOTES) ?>)">
+                    <i data-lucide="message-circle-question" class="h-4 w-4" aria-hidden="true"></i>
                   </button>
                 </div>
-
-                <h2 class="text-2xl font-hand font-bold text-blue-800 mt-6 mb-2 flex items-baseline gap-2">
-                  <?= htmlspecialchars($sec['heading'] ?? 'Section') ?>
-                  <span class="text-[10px] font-sans text-stone-400 uppercase border border-stone-200 px-1 rounded bg-white">
-                    <?= htmlspecialchars($sec['type'] ?? 'theory') ?>
-                  </span>
-                </h2>
-
-                <div class="text-lg text-stone-800 leading-8">
-                  <?= nl2br(htmlspecialchars($sec['content'] ?? '')) ?>
-                </div>
-              </div>
+                <div class="prose-note"><?= nl2br(htmlspecialchars($body)) ?></div>
+              </section>
             <?php endforeach; ?>
           </div>
         <?php elseif (!empty($note->rawContent)): ?>
-          <div class="text-lg text-stone-800 leading-8 font-hand whitespace-pre-wrap">
-            <?= htmlspecialchars($note->rawContent) ?>
+          <div class="prose-note mt-10 whitespace-pre-wrap"><?= htmlspecialchars($note->rawContent) ?></div>
+        <?php else: ?>
+          <div class="mt-10 rounded-card border border-dashed border-line-strong p-8 text-center">
+            <p class="text-sm font-semibold">This note has no content yet</p>
+            <a href="/notepad?id=<?= $note->id ?>" class="btn-secondary mt-4">
+              <i data-lucide="pen-line" class="h-4 w-4" aria-hidden="true"></i>
+              Add content
+            </a>
           </div>
         <?php endif; ?>
 
-        <!-- Keywords Tags -->
+        <!-- Tags -->
         <?php if (!empty($note->tags)): ?>
-          <div class="mt-12 pt-8 border-t-2 border-dashed border-stone-200/50">
-            <div class="flex flex-wrap gap-3">
+          <footer class="mt-12 border-t border-line pt-6">
+            <h3 class="section-label mb-3">Keywords</h3>
+            <ul class="flex flex-wrap gap-2">
               <?php foreach ($note->tags as $tag): ?>
-                <span class="px-3 py-1 font-hand text-xl bg-stone-100 text-stone-500 rounded-full border border-stone-200 transform hover:-rotate-2 transition-transform cursor-default">
-                  #<?= htmlspecialchars($tag) ?>
-                </span>
+                <li><span class="badge-neutral">#<?= htmlspecialchars($tag) ?></span></li>
               <?php endforeach; ?>
-            </div>
-          </div>
+            </ul>
+          </footer>
         <?php endif; ?>
-      </div>
+      </article>
     </div>
-  </div>
 
-  <!-- Study Buddy AI Slideout Drawer -->
-  <div id="study-buddy-panel" class="hidden w-[400px] bg-white shadow-[-10px_0_30px_rgba(0,0,0,0.1)] flex-col absolute right-0 top-16 bottom-0 z-20 border-l border-stone-100">
-    <div class="p-4 bg-yellow-50 border-b border-yellow-100 flex justify-between items-center">
-      <div class="flex items-center gap-2">
-        <div class="bg-yellow-400 p-1.5 rounded-full">
-          <i data-lucide="brain-circuit" class="w-5 h-5 text-yellow-900"></i>
+    <!-- ============ Study Buddy ============ -->
+    <!-- Full-screen sheet under lg, docked side panel from lg up. -->
+    <aside id="study-buddy-panel"
+           hidden
+           class="fixed inset-0 z-40 flex flex-col border-line bg-surface lg:static lg:z-auto lg:w-[24rem] lg:flex-shrink-0 lg:border-l"
+           aria-labelledby="study-buddy-title">
+
+      <div class="flex flex-shrink-0 items-center justify-between gap-2 border-b border-line px-4 py-3">
+        <div class="flex min-w-0 items-center gap-2.5">
+          <span class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-600">
+            <i data-lucide="sparkles" class="h-4 w-4" aria-hidden="true"></i>
+          </span>
+          <div class="min-w-0">
+            <h2 id="study-buddy-title" class="text-sm font-bold leading-tight">Study Buddy</h2>
+            <p class="truncate text-2xs font-medium normal-case tracking-normal text-content-subtle">
+              Ask anything about this note
+            </p>
+          </div>
         </div>
-        <div>
-          <h3 class="font-hand font-bold text-xl text-stone-800 leading-none">Study Buddy</h3>
-          <p class="text-xs text-stone-500">Ask questions about your notes</p>
-        </div>
-      </div>
-      <button onclick="toggleStudyBuddy()" class="hover:bg-yellow-100 p-1 rounded-full text-stone-500">
-        <i data-lucide="x" class="w-5 h-5"></i>
-      </button>
-    </div>
-
-    <div id="buddy-messages" class="flex-1 overflow-y-auto p-4 bg-desk space-y-4">
-      <div class="sticky-note p-4 text-stone-800 rotate-1 max-w-[90%] mx-auto text-center">
-        <p class="font-hand text-lg leading-tight mb-1">Hi! I am your AI study assistant.</p>
-        <p class="text-xs font-sans text-stone-600">Ask for step-by-step explanations, simpler analogies, or solved examples!</p>
-      </div>
-    </div>
-
-    <!-- Input Bar -->
-    <div class="p-4 bg-white border-t border-stone-100">
-      <div class="relative shadow-sm rounded-xl overflow-hidden border border-stone-300 focus-within:border-orange-400 focus-within:ring-2 focus-within:ring-orange-100 transition-all">
-        <textarea
-          id="buddy-input"
-          placeholder="Ask a question..."
-          rows="2"
-          class="w-full pl-3 pr-10 py-3 bg-white text-sm focus:outline-none resize-none"
-          onkeydown="if(event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); sendBuddyQuestion(); }"
-        ></textarea>
-        <button
-          onclick="sendBuddyQuestion()"
-          class="absolute right-2 bottom-2 p-1.5 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors"
-        >
-          <i data-lucide="arrow-right" class="w-4 h-4"></i>
+        <button type="button" class="btn-icon flex-shrink-0" aria-label="Close Study Buddy"
+                onclick="toggleStudyBuddy(document.getElementById('study-buddy-toggle'))">
+          <i data-lucide="x" class="h-5 w-5" aria-hidden="true"></i>
         </button>
       </div>
-    </div>
+
+      <!--
+        aria-live="polite" so assistant replies are announced as they arrive
+        without yanking focus away from the input.
+      -->
+      <div id="buddy-messages"
+           class="scrollbar-slim flex-1 space-y-3 overflow-y-auto bg-surface-sunken p-4"
+           role="log"
+           aria-live="polite"
+           aria-label="Conversation with Study Buddy">
+        <div class="rounded-card border border-line bg-surface p-4">
+          <p class="text-sm font-semibold">Hi! I can help you study this note.</p>
+          <p class="mt-1 text-2xs font-medium normal-case tracking-normal leading-relaxed text-content-muted">
+            Ask for a simpler explanation, a worked example, or a step-by-step breakdown.
+          </p>
+          <div class="mt-3 flex flex-wrap gap-1.5">
+            <button type="button" class="badge-brand transition-colors hover:bg-brand-100"
+                    onclick="askSuggested('Explain this note in simple terms')">Explain simply</button>
+            <button type="button" class="badge-brand transition-colors hover:bg-brand-100"
+                    onclick="askSuggested('Give me a worked example')">Worked example</button>
+            <button type="button" class="badge-brand transition-colors hover:bg-brand-100"
+                    onclick="askSuggested('What are the key points to memorise?')">Key points</button>
+          </div>
+        </div>
+      </div>
+
+      <form id="buddy-form" class="flex-shrink-0 border-t border-line bg-surface p-3 pb-safe">
+        <label for="buddy-input" class="sr-only">Ask Study Buddy a question</label>
+        <div class="relative">
+          <textarea id="buddy-input"
+                    rows="2"
+                    class="input-textarea pr-12"
+                    placeholder="Ask a question…"
+                    aria-describedby="buddy-input-hint"></textarea>
+          <button type="submit" class="btn-icon absolute bottom-1.5 right-1.5 h-9 w-9 bg-brand-600 text-content-inverse hover:bg-brand-700 hover:text-content-inverse"
+                  aria-label="Send question">
+            <i data-lucide="arrow-up" class="h-4 w-4" aria-hidden="true"></i>
+          </button>
+        </div>
+        <p id="buddy-input-hint" class="field-hint">Enter to send &middot; Shift + Enter for a new line</p>
+      </form>
+    </aside>
   </div>
 </div>
 
 <script>
   let activeSectionContext = '';
 
-  function toggleStudyBuddy() {
-    const panel = document.getElementById('study-buddy-panel');
-    panel.classList.toggle('hidden');
-    panel.classList.toggle('flex');
-    if (!panel.classList.contains('hidden')) {
-      document.getElementById('buddy-input').focus();
+  const buddyPanel = document.getElementById('study-buddy-panel');
+  const buddyToggle = document.getElementById('study-buddy-toggle');
+  const buddyMessages = document.getElementById('buddy-messages');
+  const buddyInput = document.getElementById('buddy-input');
+
+  function isDockedLayout() {
+    return window.matchMedia('(min-width: 1024px)').matches;
+  }
+
+  // Keep the trigger's aria-expanded truthful no matter what closed the panel
+  // (button, close icon, or Escape via the dialog controller).
+  new MutationObserver(() => {
+    buddyToggle.setAttribute('aria-expanded', String(!buddyPanel.hidden));
+  }).observe(buddyPanel, { attributes: true, attributeFilter: ['hidden'] });
+
+  function toggleStudyBuddy(trigger) {
+    // Below lg the panel covers the page, so it behaves as a modal dialog and
+    // needs the focus trap. Docked beside the note it is just another region.
+    const modal = !isDockedLayout();
+
+    if (buddyPanel.hidden) {
+      if (modal) {
+        buddyPanel.setAttribute('role', 'dialog');
+        buddyPanel.setAttribute('aria-modal', 'true');
+        NoteNest.dialog.open('study-buddy-panel', trigger);
+      } else {
+        buddyPanel.removeAttribute('role');
+        buddyPanel.removeAttribute('aria-modal');
+        buddyPanel.hidden = false;
+        buddyInput.focus();
+      }
+      return;
     }
+
+    if (NoteNest.dialog.stack.some((entry) => entry.el === 'study-buddy-panel')) {
+      NoteNest.dialog.close('study-buddy-panel');
+    } else {
+      buddyPanel.hidden = true;
+    }
+  }
+
+  // Crossing the lg breakpoint changes what this panel *is*: a docked column
+  // above it, a modal sheet below. Close it on the way across rather than
+  // leaving a docked panel covering the whole screen with no scrim, or a
+  // focus-trapped modal stranded in a layout that no longer needs one.
+  window.matchMedia('(min-width: 1024px)').addEventListener('change', () => {
+    if (buddyPanel.hidden) return;
+    if (NoteNest.dialog.stack.some((entry) => entry.el === 'study-buddy-panel')) {
+      NoteNest.dialog.close('study-buddy-panel');
+    } else {
+      buddyPanel.hidden = true;
+    }
+    buddyPanel.removeAttribute('role');
+    buddyPanel.removeAttribute('aria-modal');
+  });
+
+  function openBuddy() {
+    if (buddyPanel.hidden) toggleStudyBuddy(buddyToggle);
+  }
+
+  function askSuggested(question) {
+    openBuddy();
+    buddyInput.value = question;
+    document.getElementById('buddy-form').requestSubmit();
   }
 
   function askAboutSection(heading, content) {
     activeSectionContext = content;
-    const panel = document.getElementById('study-buddy-panel');
-    panel.classList.remove('hidden');
-    panel.classList.add('flex');
-    document.getElementById('buddy-input').value = `Explain this: "${heading}"`;
-    sendBuddyQuestion();
+    openBuddy();
+    buddyInput.value = 'Explain this section: "' + heading + '"';
+    document.getElementById('buddy-form').requestSubmit();
   }
 
-  async function sendBuddyQuestion() {
-    const input = document.getElementById('buddy-input');
-    const query = input.value.trim();
-    if (!query) return;
+  function appendBubble(html, className) {
+    const el = document.createElement('div');
+    el.className = className;
+    el.innerHTML = html;
+    buddyMessages.appendChild(el);
+    NoteNest.refreshIcons(el);
+    buddyMessages.scrollTop = buddyMessages.scrollHeight;
+    return el;
+  }
 
-    input.value = '';
-    const messages = document.getElementById('buddy-messages');
+  buddyInput.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      document.getElementById('buddy-form').requestSubmit();
+    }
+  });
 
-    // Add user bubble
-    const userBubble = document.createElement('div');
-    userBubble.className = 'self-end bg-white border border-stone-200 p-3 rounded-2xl rounded-tr-sm shadow-sm max-w-[85%] ml-auto';
-    userBubble.innerHTML = `<p class="text-sm text-stone-700">${escapeHtml(query)}</p>`;
-    messages.appendChild(userBubble);
+  document.getElementById('buddy-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const question = buddyInput.value.trim();
+    if (!question) return;
+    buddyInput.value = '';
 
-    // Add thinking bubble
-    const thinkingBubble = document.createElement('div');
-    thinkingBubble.className = 'flex items-center gap-2 text-stone-400 p-2';
-    thinkingBubble.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin text-orange-400"></i><span class="font-hand text-lg">Thinking...</span>`;
-    messages.appendChild(thinkingBubble);
-    lucide.createIcons();
-    messages.scrollTop = messages.scrollHeight;
+    appendBubble(
+      '<p class="text-sm leading-relaxed">' + NoteNest.escapeHtml(question) + '</p>',
+      'ml-auto max-w-[85%] rounded-card rounded-tr-sm bg-brand-600 px-3.5 py-2.5 text-content-inverse'
+    );
+
+    // Skeleton rather than a frozen panel, so the wait reads as progress.
+    const pending = appendBubble(
+      '<div class="flex items-center gap-2 text-2xs font-semibold uppercase tracking-wider text-content-subtle">' +
+      '<i data-lucide="loader-circle" class="h-3.5 w-3.5 animate-spin" aria-hidden="true"></i> Thinking</div>' +
+      '<div class="mt-2.5 space-y-2"><div class="skeleton h-3 w-full"></div>' +
+      '<div class="skeleton h-3 w-11/12"></div><div class="skeleton h-3 w-3/5"></div></div>',
+      'max-w-[92%] rounded-card border border-line bg-surface p-3.5'
+    );
 
     try {
-      const context = activeSectionContext || document.getElementById('note-summary-text').textContent;
-      const res = await fetch('/api/ai/solve', {
+      const context = activeSectionContext ||
+        (document.getElementById('note-summary-text')?.textContent ?? '');
+
+      const data = await NoteNest.api('/api/ai/solve', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ context, question: query })
+        body: { context, question },
       });
-      const data = await res.json();
-      thinkingBubble.remove();
 
-      const aiBubble = document.createElement('div');
-      aiBubble.className = 'bg-white border-l-4 border-orange-400 p-4 rounded-r-xl shadow-sm animate-slide-up';
-      aiBubble.innerHTML = `
-        <div class="flex items-center justify-between mb-2">
-          <span class="text-xs font-bold uppercase text-orange-500 tracking-wider">Answer</span>
-          <button onclick="NoteNest.speak(this.closest('.bg-white').querySelector('.prose').textContent)" class="p-1 text-stone-400 hover:text-stone-600">
-            <i data-lucide="volume-2" class="w-3.5 h-3.5"></i>
-          </button>
-        </div>
-        <div class="prose prose-sm prose-stone font-sans whitespace-pre-wrap leading-relaxed">${escapeHtml(data.response || 'No response.')}</div>
-      `;
-      messages.appendChild(aiBubble);
-      lucide.createIcons();
-      messages.scrollTop = messages.scrollHeight;
+      pending.remove();
+      const answer = data.response || 'No response.';
+      const bubble = appendBubble(
+        '<div class="mb-2 flex items-center justify-between gap-2">' +
+        '<span class="section-label text-brand-700">Answer</span>' +
+        '<button type="button" class="btn-icon btn-icon-compact" aria-label="Read answer aloud" data-speak>' +
+        '<i data-lucide="volume-2" class="h-3.5 w-3.5" aria-hidden="true"></i></button></div>' +
+        '<div class="whitespace-pre-wrap text-sm leading-relaxed text-content" data-answer>' +
+        NoteNest.escapeHtml(answer) + '</div>',
+        'max-w-[92%] animate-rise-in rounded-card border border-line bg-surface p-3.5 shadow-xs'
+      );
+      bubble.querySelector('[data-speak]').addEventListener('click', (e) =>
+        NoteNest.speak(bubble.querySelector('[data-answer]').textContent, e.currentTarget)
+      );
     } catch (e) {
-      thinkingBubble.remove();
-      const errBubble = document.createElement('div');
-      errBubble.className = 'text-red-500 text-xs p-2';
-      errBubble.textContent = 'Error connecting to AI tutor.';
-      messages.appendChild(errBubble);
+      pending.remove();
+      appendBubble(
+        '<p class="flex items-center gap-2 text-sm font-medium text-danger">' +
+        '<i data-lucide="circle-alert" class="h-4 w-4 flex-shrink-0" aria-hidden="true"></i>' +
+        NoteNest.escapeHtml(e.message) + '</p>' +
+        '<p class="mt-1 text-2xs font-medium text-content-muted">Check your connection and try again.</p>',
+        'max-w-[92%] rounded-card border border-danger/30 bg-danger-soft p-3.5'
+      );
     }
-  }
-
-  function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-  }
+  });
 </script>
