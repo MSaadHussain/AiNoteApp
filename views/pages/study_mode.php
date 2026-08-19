@@ -7,7 +7,7 @@ require_once dirname(__DIR__) . '/partials/helpers.php';
 $noteList = $notes ?? [];
 ?>
 
-<script src="/assets/js/study.js" defer></script>
+<script src="<?= \NoteNest\Utils\Asset::url('/assets/js/study.js') ?>" defer></script>
 
 <!-- Shared live region for flashcard/quiz state changes. -->
 <div id="study-announcer" class="sr-only" role="status" aria-live="polite"></div>

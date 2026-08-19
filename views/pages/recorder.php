@@ -6,7 +6,7 @@ $selectedSub = $preSelectedSubject ?? '';
 $registerList = $registers ?? [];
 ?>
 
-<script src="/assets/js/speech.js" defer></script>
+<script src="<?= \NoteNest\Utils\Asset::url('/assets/js/speech.js') ?>" defer></script>
 
 <div class="h-full overflow-y-auto scrollbar-slim">
 

@@ -592,9 +592,30 @@
 
   // Guard against a dialog being hidden out from under the user by a viewport
   // change (window resize, device rotation, on-screen keyboard).
+  //
+  // ResizeObserver on the root element is the reliable signal here: it fires
+  // whenever the layout box actually changes, including under device emulation
+  // and zoom, where a window 'resize' event is not always dispatched. It also
+  // needs no knowledge of which breakpoints the dialogs happen to use.
   const onViewportChange = () => Dialog.closeIfHiddenByLayout();
+
+  if ('ResizeObserver' in window) {
+    new ResizeObserver(onViewportChange).observe(document.documentElement);
+  }
   window.addEventListener('resize', onViewportChange, { passive: true });
   window.addEventListener('orientationchange', onViewportChange);
+
+  // The Tailwind breakpoints every responsive utility in the app is built on.
+  // A dialog can only be hidden by the layout at one of these widths, so a
+  // change listener on each is a precise signal - and it is delivered even in
+  // environments that throttle resize/ResizeObserver callbacks.
+  [640, 768, 1024, 1280].forEach((width) => {
+    const query = window.matchMedia('(min-width: ' + width + 'px)');
+    // addEventListener on MediaQueryList is the modern API; addListener is the
+    // deprecated fallback still needed by older Safari.
+    if (query.addEventListener) query.addEventListener('change', onViewportChange);
+    else if (query.addListener) query.addListener(onViewportChange);
+  });
 
   document.addEventListener('DOMContentLoaded', () => refreshIcons());
   if (document.readyState !== 'loading') refreshIcons();

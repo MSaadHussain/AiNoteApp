@@ -1,4 +1,7 @@
 <?php
+
+use NoteNest\Utils\Asset;
+
 /**
  * Master layout - application shell.
  *
@@ -27,7 +30,7 @@ $currentView = $currentView ?? '';
         href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Lora:ital,wght@0,400;0,500;0,600;1,400&display=swap">
 
   <!-- Compiled + purged Tailwind. Built by `npm run build:css`. -->
-  <link rel="stylesheet" href="/assets/css/app.css?v=<?= @filemtime(dirname(__DIR__, 2) . '/public/assets/css/app.css') ?: '1' ?>">
+  <link rel="stylesheet" href="<?= Asset::url('/assets/css/app.css') ?>">
 
   <!--
     Icons are deferred (365 KB, nothing depends on them during parse).
@@ -41,8 +44,8 @@ $currentView = $currentView ?? '';
     defines objects and attaches document-level listeners, so it is safe to
     run before <body> exists.
   -->
-  <script src="/assets/vendor/lucide.min.js" defer></script>
-  <script src="/assets/js/app.js"></script>
+  <script src="<?= Asset::url('/assets/vendor/lucide.min.js') ?>" defer></script>
+  <script src="<?= Asset::url('/assets/js/app.js') ?>"></script>
 </head>
 <body class="h-dvh overflow-hidden bg-surface-sunken text-content flex flex-col md:flex-row">
 

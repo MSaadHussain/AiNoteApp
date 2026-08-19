@@ -205,9 +205,18 @@ Full endpoint table lives in [README.md](README.md).
 - **Do not commit real API keys.** `.env` is tracked in this repo — keep it blank and use a
   local override if you add a key. It is now listed in `.gitignore`, but git keeps tracking
   files it already knows about; run `git rm --cached .env` if you want it untracked.
-- **Page scripts must wait for `DOMContentLoaded`** before touching `window.NoteNest`.
-  `app.js` is loaded with `defer`, so it has not executed while an inline `<script>` in a view
-  is being parsed.
+- **`app.js` is loaded blocking, in `<head>`, on purpose.** Views contain inline `<script>`
+  blocks that call `window.NoteNest`, and those execute during parsing - before any deferred
+  script has run. Adding `defer` or moving it to the end of `<body>` would make `NoteNest`
+  undefined for every one of them. The icon bundle stays deferred; nothing needs it at parse time.
+- **All asset URLs go through `NoteNest\Utils\Asset::url()`**, which appends the file's
+  modification time (`app.js?v=1787174900`). Without it, returning users keep running the
+  JavaScript their browser cached before the last deploy. Add new CSS/JS via that helper, never
+  as a bare path.
+- **Dialogs close themselves if the layout hides them.** `#mobile-drawer` is `md:hidden` and
+  `#mobile-reminders` is `xl:hidden`, so widening the window past that breakpoint would
+  otherwise leave the page scroll-locked with a focus trap armed on an invisible element.
+  `Dialog.closeIfHiddenByLayout()` runs on resize, orientation change, and breakpoint crossings.
 
 ---
 
