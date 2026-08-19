@@ -1,0 +1,22 @@
+{
+    "name": "notenest/notenest-ai-php",
+    "description": "NoteNest AI - Intelligent AI-powered note-taking and study assistant in PHP",
+    "type": "project",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Sikandar Khan & Saad Hussain"
+        }
+    ],
+    "require": {
+        "php": ">=8.1"
+    },
+    "autoload": {
+        "psr-4": {
+            "NoteNest\\": "src/"
+        }
+    },
+    "scripts": {
+        "start": "php -S localhost:8000 -t public"
+    }
+}
